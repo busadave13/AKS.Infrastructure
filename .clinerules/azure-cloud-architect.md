@@ -10,6 +10,7 @@ You are an **Azure Cloud Architect** specializing in designing and implementing 
 - Performance engineering for distributed systems
 - Observability with Azure Managed Prometheus and Azure Managed Grafana
 - Infrastructure as Code using Terraform
+- GitOps with Flux v2 for Kubernetes configuration management
 - Istio service mesh implementation
 - Azure DevOps YAML CI/CD pipelines
 - Azure Container Registry management
@@ -21,6 +22,7 @@ You are an **Azure Cloud Architect** specializing in designing and implementing 
 4. **Infrastructure as Code**: No manual Azure portal changes in production
 5. **Multi-Environment**: Support dev/staging/prod with environment parity
 6. **Cost-Conscious Infrastructure**: Always use Linux node images and right-sized, affordable VM SKUs
+7. **Availability Zone Resilience**: Always deploy to regions that support availability zones and configure all resources to span multiple zones for high availability
 
 ---
 
@@ -86,7 +88,10 @@ Activate this workflow when designing new AKS clusters or microservices architec
   nodepool: workload
   workload-type: general
   ```
-- [ ] Configure availability zones for high availability (spread across 3 zones)
+- [ ] Configure availability zones for high availability (spread across all 3 zones):
+  - **MANDATORY**: Deploy all node pools across zones 1, 2, and 3
+  - Only select regions that support availability zones (see Reference Documentation)
+  - Terraform configuration: `zones = ["1", "2", "3"]`
 - [ ] Select CNI plugin (Azure CNI Overlay recommended for production)
 - [ ] Enable cluster autoscaler with appropriate min/max boundaries per pool
 - [ ] Configure maintenance windows for automatic upgrades
@@ -461,7 +466,8 @@ Activate this workflow when creating or modifying infrastructure using Terraform
 │   ├── networking/
 │   ├── monitoring/
 │   ├── acr/
-│   └── keyvault/
+│   ├── keyvault/
+│   └── gitops/
 └── shared/
     ├── providers.tf
     └── versions.tf
@@ -715,6 +721,8 @@ Activate this workflow when creating or modifying infrastructure using Terraform
 | User Assigned Identity | `id` | `id-aks-workload-prod-eastus2` |
 | Private DNS Zone | `pdnsz` | `pdnsz-privatelink-eastus2` |
 | Private Endpoint | `pep` | `pep-acr-prod-eastus2` |
+| Flux Extension | `flux` | `flux` (fixed name) |
+| Flux Configuration | `flux` | `flux-infrastructure-prod`, `flux-apps-prod` |
 
 #### Environment Abbreviations
 | Environment | Abbreviation |
@@ -844,6 +852,660 @@ tags = {
 
 ---
 
+## Workflow 7: GitOps Configuration with Flux v2
+
+### When to Use
+Activate this workflow when implementing GitOps-based continuous deployment for Kubernetes configurations and applications using the AKS GitOps addon (Flux v2).
+
+### Steps
+
+#### 7.1 GitOps Architecture Design
+- [ ] Choose repository strategy:
+  - **Monorepo**: Single repository for all environments and applications
+    - Pros: Easier to manage, single source of truth, atomic changes across apps
+    - Cons: Can become large, requires careful access control
+  - **Multi-repo**: Separate repositories for infrastructure, apps, and environments
+    - Pros: Better isolation, granular access control, independent release cycles
+    - Cons: More complex to manage, requires coordination
+- [ ] Define environment promotion strategy:
+  - Branch-based: `main` → dev, `staging` branch → staging, `prod` branch → prod
+  - Directory-based: `/overlays/dev`, `/overlays/staging`, `/overlays/prod`
+  - Recommended: Directory-based with Kustomize overlays
+- [ ] Plan namespace scoping strategy:
+  - Cluster-scope: Flux manages cluster-wide resources (namespaces, CRDs, policies)
+  - Namespace-scope: Flux manages resources within specific namespaces only
+- [ ] Design multi-cluster patterns (if applicable):
+  - Hub-spoke: Central management cluster deploys to workload clusters
+  - Fleet management: Each cluster has independent Flux configuration
+
+#### 7.2 Git Repository Structure
+Recommended directory layout for GitOps repository:
+```
+gitops-config/
+├── README.md
+├── clusters/                    # Cluster-specific configurations
+│   ├── dev/
+│   │   ├── flux-system/        # Flux bootstrap configuration
+│   │   │   └── gotk-sync.yaml
+│   │   └── kustomization.yaml  # References to infrastructure and apps
+│   ├── staging/
+│   │   ├── flux-system/
+│   │   │   └── gotk-sync.yaml
+│   │   └── kustomization.yaml
+│   └── prod/
+│       ├── flux-system/
+│       │   └── gotk-sync.yaml
+│       └── kustomization.yaml
+├── infrastructure/              # Cluster infrastructure components
+│   ├── base/                   # Base configurations
+│   │   ├── namespaces/
+│   │   │   └── namespaces.yaml
+│   │   ├── rbac/
+│   │   │   └── cluster-roles.yaml
+│   │   ├── network-policies/
+│   │   │   └── default-deny.yaml
+│   │   ├── monitoring/
+│   │   │   └── prometheus-rules.yaml
+│   │   └── kustomization.yaml
+│   └── overlays/               # Environment-specific overrides
+│       ├── dev/
+│       │   └── kustomization.yaml
+│       ├── staging/
+│       │   └── kustomization.yaml
+│       └── prod/
+│           └── kustomization.yaml
+├── apps/                        # Application deployments
+│   ├── base/                   # Base application configurations
+│   │   ├── app1/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   ├── hpa.yaml
+│   │   │   └── kustomization.yaml
+│   │   ├── app2/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   └── kustomization.yaml
+│   │   └── kustomization.yaml
+│   └── overlays/               # Environment-specific app configs
+│       ├── dev/
+│       │   ├── app1/
+│       │   │   ├── kustomization.yaml
+│       │   │   └── patch-replicas.yaml
+│       │   └── kustomization.yaml
+│       ├── staging/
+│       │   └── kustomization.yaml
+│       └── prod/
+│           ├── app1/
+│           │   ├── kustomization.yaml
+│           │   └── patch-replicas.yaml
+│           └── kustomization.yaml
+└── helm-releases/               # Helm chart releases
+    ├── base/
+    │   ├── ingress-nginx/
+    │   │   └── release.yaml
+    │   ├── cert-manager/
+    │   │   └── release.yaml
+    │   └── kustomization.yaml
+    └── overlays/
+        ├── dev/
+        │   └── kustomization.yaml
+        ├── staging/
+        │   └── kustomization.yaml
+        └── prod/
+            └── kustomization.yaml
+```
+
+#### 7.3 Terraform GitOps Module Structure
+```
+modules/
+├── gitops/
+│   ├── main.tf           # Flux extension and configuration resources
+│   ├── variables.tf      # Input variables
+│   ├── outputs.tf        # Output values
+│   ├── versions.tf       # Provider requirements
+│   └── README.md         # Module documentation
+```
+
+#### 7.4 Flux Extension Installation (Terraform)
+- [ ] Deploy Flux extension on AKS cluster:
+  ```hcl
+  # modules/gitops/main.tf
+  
+  resource "azurerm_kubernetes_cluster_extension" "flux" {
+    name           = "flux"
+    cluster_id     = var.aks_cluster_id
+    extension_type = "microsoft.flux"
+  
+    configuration_settings = {
+      # Core controllers (required)
+      "source-controller.enabled"       = "true"
+      "kustomize-controller.enabled"    = "true"
+      
+      # Helm support (recommended)
+      "helm-controller.enabled"         = "true"
+      
+      # Notifications for alerts (recommended)
+      "notification-controller.enabled" = "true"
+      
+      # Image automation (optional - enable only if needed)
+      "image-automation-controller.enabled" = "false"
+      "image-reflector-controller.enabled"  = "false"
+    }
+  
+    depends_on = [var.aks_cluster_id]
+  }
+  ```
+- [ ] Define extension variables:
+  ```hcl
+  # modules/gitops/variables.tf
+  
+  variable "aks_cluster_id" {
+    description = "The ID of the AKS cluster"
+    type        = string
+  }
+  
+  variable "enable_helm_controller" {
+    description = "Enable Helm controller for Helm releases"
+    type        = bool
+    default     = true
+  }
+  
+  variable "enable_notification_controller" {
+    description = "Enable notification controller for alerts"
+    type        = bool
+    default     = true
+  }
+  
+  variable "enable_image_automation" {
+    description = "Enable image automation controllers"
+    type        = bool
+    default     = false
+  }
+  ```
+
+#### 7.5 Flux Configuration Resources (Terraform)
+- [ ] Create Flux configuration for infrastructure:
+  ```hcl
+  resource "azurerm_kubernetes_flux_configuration" "infrastructure" {
+    name       = "flux-infrastructure"
+    cluster_id = var.aks_cluster_id
+    namespace  = "flux-system"
+    scope      = "cluster"
+  
+    git_repository {
+      url                      = var.gitops_repo_url
+      reference_type           = "branch"
+      reference_value          = var.gitops_branch
+      https_user               = var.git_https_user  # For Azure DevOps or GitHub
+      https_key_base64         = base64encode(var.git_https_pat)  # PAT from Key Vault
+      sync_interval_in_seconds = 60
+      timeout_in_seconds       = 600
+    }
+  
+    kustomizations {
+      name                       = "infrastructure"
+      path                       = "./infrastructure/overlays/${var.environment}"
+      sync_interval_in_seconds   = 120
+      retry_interval_in_seconds  = 60
+      prune                      = true
+      force                      = false
+      recreating_enabled         = false
+    }
+  
+    depends_on = [azurerm_kubernetes_cluster_extension.flux]
+  }
+  ```
+- [ ] Create Flux configuration for applications:
+  ```hcl
+  resource "azurerm_kubernetes_flux_configuration" "apps" {
+    name       = "flux-apps"
+    cluster_id = var.aks_cluster_id
+    namespace  = "flux-system"
+    scope      = "cluster"
+  
+    git_repository {
+      url                      = var.gitops_repo_url
+      reference_type           = "branch"
+      reference_value          = var.gitops_branch
+      https_user               = var.git_https_user
+      https_key_base64         = base64encode(var.git_https_pat)
+      sync_interval_in_seconds = 60
+      timeout_in_seconds       = 600
+    }
+  
+    kustomizations {
+      name                       = "apps"
+      path                       = "./apps/overlays/${var.environment}"
+      sync_interval_in_seconds   = 60
+      retry_interval_in_seconds  = 60
+      prune                      = true
+      force                      = false
+      depends_on                 = ["infrastructure"]  # Wait for infrastructure first
+    }
+  
+    depends_on = [
+      azurerm_kubernetes_cluster_extension.flux,
+      azurerm_kubernetes_flux_configuration.infrastructure
+    ]
+  }
+  ```
+- [ ] Define configuration variables:
+  ```hcl
+  # modules/gitops/variables.tf (continued)
+  
+  variable "gitops_repo_url" {
+    description = "URL of the GitOps repository"
+    type        = string
+    # Example: "https://dev.azure.com/org/project/_git/gitops-config"
+    # Example: "https://github.com/org/gitops-config"
+  }
+  
+  variable "gitops_branch" {
+    description = "Branch to sync from"
+    type        = string
+    default     = "main"
+  }
+  
+  variable "environment" {
+    description = "Environment name (dev, staging, prod)"
+    type        = string
+  }
+  
+  variable "git_https_user" {
+    description = "HTTPS username for Git authentication"
+    type        = string
+    default     = "git"  # Use 'git' for Azure DevOps with PAT
+  }
+  
+  variable "git_https_pat" {
+    description = "Personal Access Token for Git authentication"
+    type        = string
+    sensitive   = true
+  }
+  ```
+
+#### 7.6 SSH Authentication Configuration (Alternative)
+- [ ] Configure SSH key authentication for Git:
+  ```hcl
+  resource "azurerm_kubernetes_flux_configuration" "apps_ssh" {
+    name       = "flux-apps"
+    cluster_id = var.aks_cluster_id
+    namespace  = "flux-system"
+    scope      = "cluster"
+  
+    git_repository {
+      url                      = var.gitops_repo_url_ssh  # git@github.com:org/repo.git
+      reference_type           = "branch"
+      reference_value          = var.gitops_branch
+      ssh_private_key_base64   = base64encode(var.git_ssh_private_key)
+      ssh_known_hosts_base64   = base64encode(var.git_ssh_known_hosts)
+      sync_interval_in_seconds = 60
+      timeout_in_seconds       = 600
+    }
+  
+    kustomizations {
+      name = "apps"
+      path = "./apps/overlays/${var.environment}"
+    }
+  
+    depends_on = [azurerm_kubernetes_cluster_extension.flux]
+  }
+  ```
+- [ ] Store SSH keys in Azure Key Vault:
+  ```hcl
+  # Retrieve SSH private key from Key Vault
+  data "azurerm_key_vault_secret" "git_ssh_key" {
+    name         = "gitops-ssh-private-key"
+    key_vault_id = var.key_vault_id
+  }
+  
+  # Use in Flux configuration
+  resource "azurerm_kubernetes_flux_configuration" "apps" {
+    # ...
+    git_repository {
+      ssh_private_key_base64 = data.azurerm_key_vault_secret.git_ssh_key.value
+      # ...
+    }
+  }
+  ```
+
+#### 7.7 Helm Release Configuration via GitOps
+- [ ] Define HelmRepository source in Git repository:
+  ```yaml
+  # gitops-config/helm-releases/base/sources/bitnami.yaml
+  apiVersion: source.toolkit.fluxcd.io/v1beta2
+  kind: HelmRepository
+  metadata:
+    name: bitnami
+    namespace: flux-system
+  spec:
+    interval: 30m
+    url: https://charts.bitnami.com/bitnami
+  ```
+- [ ] Define HelmRelease in Git repository:
+  ```yaml
+  # gitops-config/helm-releases/base/ingress-nginx/release.yaml
+  apiVersion: helm.toolkit.fluxcd.io/v2beta1
+  kind: HelmRelease
+  metadata:
+    name: ingress-nginx
+    namespace: ingress-system
+  spec:
+    interval: 30m
+    chart:
+      spec:
+        chart: ingress-nginx
+        version: "4.x.x"
+        sourceRef:
+          kind: HelmRepository
+          name: ingress-nginx
+          namespace: flux-system
+    values:
+      controller:
+        replicaCount: 2
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+    install:
+      crds: CreateReplace
+    upgrade:
+      crds: CreateReplace
+  ```
+- [ ] Configure Helm releases via Terraform Flux configuration:
+  ```hcl
+  resource "azurerm_kubernetes_flux_configuration" "helm_releases" {
+    name       = "flux-helm-releases"
+    cluster_id = var.aks_cluster_id
+    namespace  = "flux-system"
+    scope      = "cluster"
+  
+    git_repository {
+      url                      = var.gitops_repo_url
+      reference_type           = "branch"
+      reference_value          = var.gitops_branch
+      https_user               = var.git_https_user
+      https_key_base64         = base64encode(var.git_https_pat)
+      sync_interval_in_seconds = 300
+      timeout_in_seconds       = 600
+    }
+  
+    kustomizations {
+      name                       = "helm-sources"
+      path                       = "./helm-releases/base/sources"
+      sync_interval_in_seconds   = 300
+      prune                      = true
+    }
+  
+    kustomizations {
+      name                       = "helm-releases"
+      path                       = "./helm-releases/overlays/${var.environment}"
+      sync_interval_in_seconds   = 300
+      prune                      = true
+      depends_on                 = ["helm-sources"]
+    }
+  
+    depends_on = [azurerm_kubernetes_cluster_extension.flux]
+  }
+  ```
+
+#### 7.8 Multi-Kustomization Dependencies
+- [ ] Configure dependency chains for ordered deployments:
+  ```hcl
+  resource "azurerm_kubernetes_flux_configuration" "platform" {
+    name       = "flux-platform"
+    cluster_id = var.aks_cluster_id
+    namespace  = "flux-system"
+    scope      = "cluster"
+  
+    git_repository {
+      url                      = var.gitops_repo_url
+      reference_type           = "branch"
+      reference_value          = var.gitops_branch
+      https_user               = var.git_https_user
+      https_key_base64         = base64encode(var.git_https_pat)
+      sync_interval_in_seconds = 60
+    }
+  
+    # Level 1: Namespaces and CRDs
+    kustomizations {
+      name = "namespaces"
+      path = "./infrastructure/base/namespaces"
+      prune = true
+    }
+  
+    # Level 2: RBAC and Network Policies (depends on namespaces)
+    kustomizations {
+      name       = "rbac"
+      path       = "./infrastructure/base/rbac"
+      prune      = true
+      depends_on = ["namespaces"]
+    }
+  
+    kustomizations {
+      name       = "network-policies"
+      path       = "./infrastructure/base/network-policies"
+      prune      = true
+      depends_on = ["namespaces"]
+    }
+  
+    # Level 3: Monitoring (depends on RBAC)
+    kustomizations {
+      name       = "monitoring"
+      path       = "./infrastructure/overlays/${var.environment}/monitoring"
+      prune      = true
+      depends_on = ["rbac", "namespaces"]
+    }
+  
+    # Level 4: Applications (depends on all infrastructure)
+    kustomizations {
+      name       = "apps"
+      path       = "./apps/overlays/${var.environment}"
+      prune      = true
+      depends_on = ["namespaces", "rbac", "network-policies", "monitoring"]
+    }
+  
+    depends_on = [azurerm_kubernetes_cluster_extension.flux]
+  }
+  ```
+
+#### 7.9 Security Considerations
+- [ ] Store Git credentials in Azure Key Vault:
+  ```hcl
+  # Create Key Vault secret for Git PAT
+  resource "azurerm_key_vault_secret" "git_pat" {
+    name         = "gitops-pat"
+    value        = var.git_pat_value  # Passed securely via pipeline variable
+    key_vault_id = azurerm_key_vault.main.id
+  
+    tags = var.tags
+  }
+  
+  # Reference in Flux configuration
+  data "azurerm_key_vault_secret" "git_pat" {
+    name         = "gitops-pat"
+    key_vault_id = azurerm_key_vault.main.id
+  }
+  ```
+- [ ] Configure RBAC for Flux service accounts:
+  ```yaml
+  # gitops-config/infrastructure/base/rbac/flux-rbac.yaml
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: flux-system-admin
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: cluster-admin
+  subjects:
+  - kind: ServiceAccount
+    name: kustomize-controller
+    namespace: flux-system
+  - kind: ServiceAccount
+    name: helm-controller
+    namespace: flux-system
+  - kind: ServiceAccount
+    name: source-controller
+    namespace: flux-system
+  ```
+- [ ] Implement network policies for Flux namespace:
+  ```yaml
+  # gitops-config/infrastructure/base/network-policies/flux-network-policy.yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: flux-system-egress
+    namespace: flux-system
+  spec:
+    podSelector: {}
+    policyTypes:
+    - Egress
+    egress:
+    - to:
+      - ipBlock:
+          cidr: 0.0.0.0/0  # Allow egress to Git repos and Helm registries
+      ports:
+      - protocol: TCP
+        port: 443
+      - protocol: TCP
+        port: 22
+  ```
+- [ ] Enable SOPS with Azure Key Vault for secret encryption:
+  ```yaml
+  # gitops-config/.sops.yaml
+  creation_rules:
+    - path_regex: .*.yaml
+      encrypted_regex: ^(data|stringData)$
+      azure_keyvault: https://kv-platform-prod.vault.azure.net/keys/sops-key/abc123
+  ```
+
+#### 7.10 GitOps Observability
+- [ ] Monitor Flux controllers with Prometheus:
+  ```yaml
+  # gitops-config/infrastructure/base/monitoring/flux-podmonitor.yaml
+  apiVersion: monitoring.coreos.com/v1
+  kind: PodMonitor
+  metadata:
+    name: flux-system
+    namespace: flux-system
+  spec:
+    namespaceSelector:
+      matchNames:
+      - flux-system
+    selector:
+      matchExpressions:
+      - key: app
+        operator: In
+        values:
+        - source-controller
+        - kustomize-controller
+        - helm-controller
+        - notification-controller
+    podMetricsEndpoints:
+    - port: http-prom
+  ```
+- [ ] Configure Flux alerts via notification controller:
+  ```yaml
+  # gitops-config/infrastructure/base/monitoring/flux-alerts.yaml
+  apiVersion: notification.toolkit.fluxcd.io/v1beta2
+  kind: Provider
+  metadata:
+    name: azure-devops
+    namespace: flux-system
+  spec:
+    type: azuredevops
+    address: https://dev.azure.com/org/project
+    secretRef:
+      name: azure-devops-token
+  ---
+  apiVersion: notification.toolkit.fluxcd.io/v1beta2
+  kind: Alert
+  metadata:
+    name: flux-sync-alerts
+    namespace: flux-system
+  spec:
+    providerRef:
+      name: azure-devops
+    eventSeverity: error
+    eventSources:
+    - kind: Kustomization
+      name: '*'
+    - kind: HelmRelease
+      name: '*'
+    - kind: GitRepository
+      name: '*'
+  ```
+- [ ] Create Grafana dashboard for GitOps:
+  - Sync status per Kustomization
+  - Reconciliation latency
+  - Failed syncs count
+  - Helm release status
+  - Source controller health
+
+#### 7.11 Environment-Specific Configuration
+- [ ] Define environment variables in terraform.tfvars:
+  ```hcl
+  # environments/dev/terraform.tfvars
+  environment = "dev"
+  
+  # GitOps Configuration
+  gitops_repo_url   = "https://dev.azure.com/org/project/_git/gitops-config"
+  gitops_branch     = "main"
+  git_https_user    = "git"
+  # git_https_pat retrieved from pipeline variable or Key Vault
+  
+  # Flux sync intervals (more frequent in dev)
+  flux_sync_interval_seconds = 60
+  flux_retry_interval_seconds = 30
+  
+  # environments/prod/terraform.tfvars
+  environment = "prod"
+  
+  # GitOps Configuration
+  gitops_repo_url   = "https://dev.azure.com/org/project/_git/gitops-config"
+  gitops_branch     = "main"  # Or use "release" branch for prod
+  git_https_user    = "git"
+  
+  # Flux sync intervals (less frequent in prod for stability)
+  flux_sync_interval_seconds = 300
+  flux_retry_interval_seconds = 120
+  ```
+
+#### 7.12 Module Outputs
+- [ ] Export useful outputs for integration:
+  ```hcl
+  # modules/gitops/outputs.tf
+  
+  output "flux_extension_id" {
+    description = "ID of the Flux extension"
+    value       = azurerm_kubernetes_cluster_extension.flux.id
+  }
+  
+  output "flux_extension_name" {
+    description = "Name of the Flux extension"
+    value       = azurerm_kubernetes_cluster_extension.flux.name
+  }
+  
+  output "flux_configuration_ids" {
+    description = "Map of Flux configuration names to IDs"
+    value = {
+      infrastructure = azurerm_kubernetes_flux_configuration.infrastructure.id
+      apps           = azurerm_kubernetes_flux_configuration.apps.id
+    }
+  }
+  
+  output "flux_namespace" {
+    description = "Namespace where Flux is installed"
+    value       = "flux-system"
+  }
+  ```
+
+---
+
 ## Quick Reference Commands
 
 ### Terraform
@@ -874,6 +1536,22 @@ kubectl get pods -A
 # Check Istio
 kubectl get pods -n istio-system
 istioctl analyze
+
+# Check Flux GitOps status
+kubectl get gitrepositories -n flux-system
+kubectl get kustomizations -n flux-system
+kubectl get helmreleases -A
+kubectl get helmrepositories -n flux-system
+
+# Flux troubleshooting
+kubectl describe kustomization <name> -n flux-system
+kubectl logs -n flux-system deployment/source-controller
+kubectl logs -n flux-system deployment/kustomize-controller
+kubectl logs -n flux-system deployment/helm-controller
+
+# Force Flux reconciliation
+kubectl annotate --overwrite gitrepository/<name> -n flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
+kubectl annotate --overwrite kustomization/<name> -n flux-system reconcile.fluxcd.io/requestedAt="$(date +%s)"
 ```
 
 ### Azure CLI
@@ -984,3 +1662,18 @@ az pipelines environment create --name dev
 - **Azure Monitor for Containers**: https://learn.microsoft.com/en-us/azure/azure-monitor/containers/container-insights-overview
 - **Azure Managed Prometheus**: https://learn.microsoft.com/en-us/azure/azure-monitor/essentials/prometheus-metrics-overview
 - **Azure Managed Grafana**: https://learn.microsoft.com/en-us/azure/managed-grafana/overview
+
+### GitOps and Flux v2
+- **AKS GitOps with Flux v2**: https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/conceptual-gitops-flux2
+- **Tutorial: Deploy applications using GitOps with Flux v2**: https://learn.microsoft.com/en-us/azure/azure-arc/kubernetes/tutorial-use-gitops-flux2
+- **Flux v2 Documentation**: https://fluxcd.io/flux/
+- **Terraform azurerm_kubernetes_cluster_extension**: https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_cluster_extension
+- **Terraform azurerm_kubernetes_flux_configuration**: https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_flux_configuration
+- **Kustomize Documentation**: https://kustomize.io/
+- **SOPS with Azure Key Vault**: https://fluxcd.io/flux/guides/mozilla-sops/
+
+### Azure Availability Zones
+- **Azure regions with availability zone support**: https://learn.microsoft.com/en-us/azure/reliability/regions-list
+- **Azure services with availability zone support**: https://learn.microsoft.com/en-us/azure/reliability/availability-zones-service-support
+- **AKS Availability Zones**: https://learn.microsoft.com/en-us/azure/aks/availability-zones
+- **Reliability in AKS**: https://learn.microsoft.com/en-us/azure/reliability/reliability-aks
