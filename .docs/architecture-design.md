@@ -956,7 +956,35 @@ flowchart LR
     APPLY --> RG
 ```
 
-### 10.2 Workflow YAML
+### 10.2 Workflow Overview
+
+The Terraform workflow uses **GitHub Environments with protection rules** to enforce manual approval before applying infrastructure changes. This ensures that:
+
+1. All changes are reviewed before deployment
+2. The Terraform plan is generated and can be inspected
+3. Only authorized users can approve deployments
+4. Destructive operations (destroy) require separate approval
+
+#### Workflow Jobs
+
+| Job | Purpose | Environment | Approval Required |
+|-----|---------|-------------|-------------------|
+| Validate | Format check, init, validate | None | No |
+| Plan | Generate Terraform plan | None | No |
+| Apply | Apply Terraform changes | `dev` | **Yes** |
+| Destroy | Destroy infrastructure | `dev-destroy` | **Yes** |
+
+#### Workflow Triggers and Behavior
+
+| Trigger | Jobs Executed | Approval Required |
+|---------|---------------|-------------------|
+| Push to `main` | Validate → Plan | No |
+| Pull Request to `main` | Validate → Plan (with PR comment) | No |
+| Manual dispatch: `plan` | Validate → Plan | No |
+| Manual dispatch: `apply` | Validate → Plan → **Wait for approval** → Apply | **Yes** |
+| Manual dispatch: `destroy` | Validate → **Wait for approval** → Destroy | **Yes** |
+
+### 10.3 Workflow YAML
 
 ```yaml
 # .github/workflows/terraform.yml
@@ -1014,144 +1042,77 @@ jobs:
   validate:
     name: 'Validate'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: terraform/environments/dev
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Terraform Format Check
-        run: terraform fmt -check -recursive
-        working-directory: terraform
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Validate
-        run: terraform validate -no-color
+    # ... validation steps
 
   plan:
     name: 'Plan'
     runs-on: ubuntu-latest
     needs: validate
-    defaults:
-      run:
-        working-directory: terraform/environments/dev
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Plan
-        run: terraform plan -detailed-exitcode -no-color -out=tfplan
-
-      - name: Upload Terraform Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-dev-${{ github.run_id }}
-          path: terraform/environments/dev/tfplan
-          retention-days: 5
+    # ... plan steps with artifact upload
 
   apply:
     name: 'Apply'
     runs-on: ubuntu-latest
     needs: plan
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
-    defaults:
-      run:
-        working-directory: terraform/environments/dev
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Download Terraform Plan
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan-dev-${{ github.run_id }}
-          path: terraform/environments/dev
-
-      - name: Terraform Apply
-        run: terraform apply -auto-approve tfplan
+    environment: dev  # Requires approval from environment reviewers
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+    # ... apply steps
 
   destroy:
     name: 'Destroy'
     runs-on: ubuntu-latest
+    needs: validate
+    environment: dev-destroy  # Separate environment for destructive operations
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
-    defaults:
-      run:
-        working-directory: terraform/environments/dev
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
-
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Terraform Destroy
-        run: terraform destroy -auto-approve
+    # ... destroy steps
 ```
 
-### 10.3 GitHub Actions Configuration
+> **Note**: See the full workflow file at `.github/workflows/terraform.yml` for complete implementation details.
+
+### 10.4 GitHub Environments Configuration
+
+GitHub Environments must be configured in the repository settings to enable the approval workflow.
+
+#### Required Environments
+
+| Environment | Purpose | Configuration |
+|-------------|---------|---------------|
+| `dev` | Terraform apply approval | Required reviewers |
+| `dev-destroy` | Terraform destroy approval | Required reviewers, longer wait timer |
+
+#### Setup Instructions
+
+1. **Navigate to Environment Settings**:
+   - Go to repository: **Settings → Environments**
+
+2. **Create `dev` Environment**:
+   - Click **New environment**
+   - Name: `dev`
+   - Click **Configure environment**
+   - Under **Deployment protection rules**:
+     - Enable **Required reviewers**
+     - Add yourself or your team as reviewers
+   - Click **Save protection rules**
+
+3. **Create `dev-destroy` Environment**:
+   - Click **New environment**
+   - Name: `dev-destroy`
+   - Click **Configure environment**
+   - Under **Deployment protection rules**:
+     - Enable **Required reviewers**
+     - Add yourself or your team as reviewers
+     - Optionally enable **Wait timer** (e.g., 5 minutes) for extra safety
+   - Click **Save protection rules**
+
+#### Environment Protection Rules
+
+| Rule | `dev` | `dev-destroy` |
+|------|-------|---------------|
+| Required reviewers | ✅ 1+ reviewers | ✅ 1+ reviewers |
+| Wait timer | Optional | Recommended (5 min) |
+| Restrict to branches | Optional (`main`) | Recommended (`main`) |
+
+### 10.5 GitHub Actions Configuration
 
 #### Required Repository Secrets
 
