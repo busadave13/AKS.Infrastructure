@@ -191,8 +191,12 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
     "kubernetes.azure.com/scalesetpriority=spot:NoSchedule"
   ] : []
 
-  upgrade_settings {
-    max_surge = "10%"
+  # Upgrade settings - not allowed for spot node pools
+  dynamic "upgrade_settings" {
+    for_each = var.workload_node_spot ? [] : [1]
+    content {
+      max_surge = "10%"
+    }
   }
 
   lifecycle {
