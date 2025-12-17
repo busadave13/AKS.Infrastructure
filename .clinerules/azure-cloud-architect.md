@@ -55,14 +55,36 @@ Activate this workflow when designing new AKS clusters or microservices architec
 
 #### 1.3 AKS Cluster Configuration
 - [ ] Select Kubernetes version (latest stable, n-1 policy)
-- [ ] Design node pool strategy:
-  - System node pool: Dedicated for system pods, tainted
-  - User node pools: Per workload type or team
-  - Spot node pools: For non-critical, interruptible workloads
-- [ ] Configure availability zones for high availability
-- [ ] Select CNI plugin (Azure CNI recommended for production)
-- [ ] Enable cluster autoscaler with appropriate min/max boundaries
-- [ ] Configure maintenance windows
+- [ ] Design node pool strategy with mandatory separation:
+  - **System node pool** (required):
+    - Dedicated for critical system pods (CoreDNS, metrics-server, etc.)
+    - Apply `CriticalAddonsOnly=true:NoSchedule` taint
+    - Mode: System
+    - Minimum 2-3 nodes for high availability
+    - VM SKU: Standard_D4s_v5 or similar
+    - Enable autoscaling (min: 2, max: 5)
+  - **Workload node pool** (required):
+    - Dedicated for application workloads
+    - Mode: User
+    - No system taints, accepts all workload pods
+    - VM SKU based on workload requirements
+    - Enable autoscaling based on demand
+  - **Additional user node pools** (optional):
+    - Spot node pools: For non-critical, interruptible workloads
+    - Specialized pools: GPU, high-memory, or compute-optimized
+- [ ] Configure node pool labels for workload targeting:
+  ```yaml
+  # System node pool labels
+  nodepool: system
+  
+  # Workload node pool labels
+  nodepool: workload
+  workload-type: general
+  ```
+- [ ] Configure availability zones for high availability (spread across 3 zones)
+- [ ] Select CNI plugin (Azure CNI Overlay recommended for production)
+- [ ] Enable cluster autoscaler with appropriate min/max boundaries per pool
+- [ ] Configure maintenance windows for automatic upgrades
 
 #### 1.4 Istio Service Mesh Design
 - [ ] Define Istio installation profile (production/minimal)
@@ -656,15 +678,112 @@ Activate this workflow when creating or modifying infrastructure using Terraform
 ## Workflow 6: Best Practices and Guidelines
 
 ### Naming Conventions
-```
-{resource-type}-{workload}-{environment}-{region}-{instance}
 
-Examples:
-- rg-aks-platform-prod-eastus2
-- aks-microservices-prod-eastus2
-- acr-microservices-prod-eastus2
-- kv-platform-prod-eastus2
-- vnet-platform-prod-eastus2
+#### Standard Naming Pattern
+```
+{resource-prefix}-{workload/application}-{environment}-{region}-{instance}
+```
+
+#### Resource Type Prefixes
+| Resource Type | Prefix | Example |
+|--------------|--------|---------|
+| Resource Group | `rg` | `rg-aks-platform-prod-eastus2` |
+| Virtual Network | `vnet` | `vnet-platform-prod-eastus2` |
+| Subnet | `snet` | `snet-aks-prod-eastus2` |
+| Network Security Group | `nsg` | `nsg-aks-prod-eastus2` |
+| NAT Gateway | `ng` | `ng-platform-prod-eastus2` |
+| Public IP | `pip` | `pip-nat-prod-eastus2` |
+| DDoS Protection Plan | `ddos` | `ddos-platform-prod-eastus2` |
+| Azure Kubernetes Service | `aks` | `aks-microservices-prod-eastus2` |
+| Azure Container Registry | `acr` | `acrplatformprodeastus2` (no hyphens) |
+| Key Vault | `kv` | `kv-platform-prod-eastus2` |
+| Storage Account | `st` | `stplatformprodeastus2` (no hyphens) |
+| Log Analytics Workspace | `log` | `log-platform-prod-eastus2` |
+| Application Insights | `appi` | `appi-platform-prod-eastus2` |
+| Azure Monitor Workspace | `amw` | `amw-platform-prod-eastus2` |
+| Managed Grafana | `grafana` | `grafana-platform-prod-eastus2` |
+| Application Gateway | `agw` | `agw-platform-prod-eastus2` |
+| User Assigned Identity | `id` | `id-aks-workload-prod-eastus2` |
+| Private DNS Zone | `pdnsz` | `pdnsz-privatelink-eastus2` |
+| Private Endpoint | `pep` | `pep-acr-prod-eastus2` |
+
+#### Environment Abbreviations
+| Environment | Abbreviation |
+|-------------|--------------|
+| Development | `dev` |
+| Staging | `staging` |
+| Production | `prod` |
+| Shared/Common | `shared` |
+
+#### Region Abbreviations
+| Region | Abbreviation |
+|--------|--------------|
+| East US | `eastus` |
+| East US 2 | `eastus2` |
+| West US | `westus` |
+| West US 2 | `westus2` |
+| Central US | `centralus` |
+| West Europe | `westeurope` |
+| North Europe | `northeurope` |
+
+#### Special Naming Rules
+1. **Storage Accounts & ACR**: No hyphens, lowercase only, 3-24 characters
+   - Pattern: `{prefix}{workload}{env}{region}` 
+   - Example: `stplatformprodeastus2`, `acrplatformprodeastus2`
+
+2. **Key Vault**: Limited to 24 characters, alphanumeric and hyphens
+   - Pattern: `kv-{workload}-{env}-{region}`
+   - Example: `kv-platform-prod-eus2`
+
+3. **AKS Node Pools**: Alphanumeric only, max 12 characters
+   - System pool: `system`
+   - Workload pool: `workload` or `userpool1`
+   - Spot pool: `spot`
+
+4. **Managed Identities**: Describe the workload/purpose
+   - Pattern: `id-{workload}-{purpose}-{env}-{region}`
+   - Example: `id-aks-kubelet-prod-eastus2`, `id-app-keyvault-prod-eastus2`
+
+#### Complete Naming Examples
+```
+# Resource Group
+rg-aks-platform-prod-eastus2
+
+# Networking
+vnet-platform-prod-eastus2
+snet-aks-nodes-prod-eastus2
+snet-appgw-prod-eastus2
+snet-privateendpoints-prod-eastus2
+nsg-aks-prod-eastus2
+ng-platform-prod-eastus2
+pip-nat-prod-eastus2-001
+ddos-platform-prod-eastus2
+
+# AKS Cluster
+aks-microservices-prod-eastus2
+
+# Container Registry (no hyphens)
+acrplatformprodeastus2
+
+# Key Vault
+kv-platform-prod-eus2
+
+# Storage (no hyphens)
+stterraformstateeastus2
+
+# Monitoring
+log-platform-prod-eastus2
+amw-platform-prod-eastus2
+grafana-platform-prod-eastus2
+appi-microservices-prod-eastus2
+
+# Identities
+id-aks-kubelet-prod-eastus2
+id-aks-workload-prod-eastus2
+
+# Private Endpoints
+pep-acr-prod-eastus2
+pep-keyvault-prod-eastus2
 ```
 
 ### Required Tags
