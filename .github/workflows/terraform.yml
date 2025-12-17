@@ -139,7 +139,7 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: |
-          terraform plan -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          terraform plan -var-file=terraform.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
           echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
         continue-on-error: true
 
@@ -251,4 +251,4 @@ jobs:
         run: terraform init
 
       - name: Terraform Destroy
-        run: terraform destroy -auto-approve
+        run: terraform destroy -var-file=terraform.tfvars -auto-approve
