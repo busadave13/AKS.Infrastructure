@@ -22,9 +22,12 @@ resource "azurerm_container_registry" "main" {
     }
   }
 
-  # Network rules - allow Azure services
-  network_rule_set {
-    default_action = var.enable_private_endpoint ? "Deny" : "Allow"
+  # Network rules - only for Premium SKU
+  dynamic "network_rule_set" {
+    for_each = var.sku == "Premium" ? [1] : []
+    content {
+      default_action = var.enable_private_endpoint ? "Deny" : "Allow"
+    }
   }
 
   # Enable content trust for Premium SKU

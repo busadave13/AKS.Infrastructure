@@ -21,6 +21,21 @@ resource "azurerm_user_assigned_identity" "workload" {
   tags                = var.tags
 }
 
+# Control Plane Identity (used by AKS control plane)
+resource "azurerm_user_assigned_identity" "control_plane" {
+  name                = replace(var.kubelet_identity_name, "kubelet", "cp")
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+}
+
+# Grant Control Plane identity "Managed Identity Operator" on Kubelet identity
+resource "azurerm_role_assignment" "control_plane_mi_operator" {
+  scope                = azurerm_user_assigned_identity.kubelet.id
+  role_definition_name = "Managed Identity Operator"
+  principal_id         = azurerm_user_assigned_identity.control_plane.principal_id
+}
+
 #--------------------------------------------------------------
 # AKS Cluster
 #--------------------------------------------------------------
@@ -62,10 +77,10 @@ resource "azurerm_kubernetes_cluster" "main" {
     tags = var.tags
   }
 
-  # Identity configuration
+  # Identity configuration - uses control plane identity
   identity {
     type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.kubelet.id]
+    identity_ids = [azurerm_user_assigned_identity.control_plane.id]
   }
 
   kubelet_identity {
@@ -135,6 +150,8 @@ resource "azurerm_kubernetes_cluster" "main" {
       default_node_pool[0].node_count,
     ]
   }
+
+  depends_on = [azurerm_role_assignment.control_plane_mi_operator]
 }
 
 #--------------------------------------------------------------
@@ -166,7 +183,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
   spot_max_price  = var.workload_node_spot ? -1 : null
 
   node_labels = {
-    "nodepool"                               = "workload"
+    "nodepool"                              = "workload"
     "kubernetes.azure.com/scalesetpriority" = var.workload_node_spot ? "spot" : "regular"
   }
 
