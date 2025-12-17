@@ -1,0 +1,31 @@
+# Bootstrap Terraform Variables Example
+# 
+# Copy this file to terraform.tfvars and update the values.
+# DO NOT commit terraform.tfvars to version control.
+
+# Environment name - creates separate Azure AD apps and storage for each environment
+environment = "dev"
+
+# Azure region for Terraform state storage
+location = "westus2"
+
+# GitHub repository configuration
+# Full repository name in format "owner/repo"
+github_repository = "busadave13/AKS.Infrastructure"
+
+# Short repository name (without owner)
+github_repository_name = "AKS.Infrastructure"
+
+# Enable User Access Administrator role for the service principal
+# Required if Terraform needs to manage RBAC assignments
+enable_rbac_management = true
+
+# Additional federated subjects for custom scenarios (optional)
+# Uncomment and modify if you need additional federated identities
+# additional_federated_subjects = [
+#   {
+#     name        = "release-tags"
+#     description = "GitHub Actions - Release Tags"
+#     subject     = "repo:busadave13/AKS.Infrastructure:ref:refs/tags/v*"
+#   }
+# ]

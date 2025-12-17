@@ -26,6 +26,23 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# Terraform local backend configuration (contains sensitive info)
+backend.hcl
+**/backend.hcl
+
+# Terraform tfvars files (may contain sensitive info)
+# Use terraform.tfvars.example as template
+terraform.tfvars
+**/terraform.tfvars
+!**/*.tfvars.example
+
+# Terraform plan files
+*.tfplan
+tfplan
+**/tfplan
+plan_output.txt
+**/plan_output.txt
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

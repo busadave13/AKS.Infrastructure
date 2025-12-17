@@ -21,6 +21,13 @@ terraform {
 }
 
 # Configure the Azure Provider
+# 
+# Authentication is handled via OIDC/Workload Identity in GitHub Actions.
+# The following environment variables are set by the workflow:
+# - ARM_CLIENT_ID: Azure AD Application (Client) ID
+# - ARM_TENANT_ID: Azure AD Tenant ID  
+# - ARM_SUBSCRIPTION_ID: Azure Subscription ID
+# - ARM_USE_OIDC: Set to "true" to enable OIDC authentication
 provider "azurerm" {
   features {
     resource_group {
@@ -29,7 +36,9 @@ provider "azurerm" {
   }
 }
 
-provider "azuread" {}
+provider "azuread" {
+  # Uses the same OIDC authentication as azurerm provider
+}
 
 # Local variables for naming convention
 locals {

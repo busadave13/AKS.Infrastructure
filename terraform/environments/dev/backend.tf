@@ -1,22 +1,22 @@
 # Terraform Backend Configuration
 # 
-# Before using this backend, you need to create the storage account:
+# This backend uses OIDC/Workload Identity authentication via GitHub Actions.
+# No secrets required - authentication is handled via federated credentials.
 #
-# az group create --name rg-terraform-state --location westus2
-# az storage account create --name stterraformstate<unique> --resource-group rg-terraform-state --sku Standard_LRS --encryption-services blob
-# az storage container create --name tfstate --account-name stterraformstate<unique>
+# Prerequisites:
+# 1. Run the bootstrap configuration: terraform/bootstrap/
+# 2. Configure GitHub secrets and variables as shown in bootstrap outputs
 #
-# Then update the storage_account_name below with your actual storage account name
-# and uncomment the backend block.
+# The backend is configured via -backend-config flags in the GitHub Actions workflow,
+# allowing dynamic configuration and OIDC authentication.
 
-# terraform {
-#   backend "azurerm" {
-#     resource_group_name  = "rg-terraform-state"
-#     storage_account_name = "stterraformstate<unique>"
-#     container_name       = "tfstate"
-#     key                  = "aks-dev.terraform.tfstate"
-#   }
-# }
-
-# For local development, Terraform will use local state by default.
-# Uncomment the backend block above when ready for team collaboration.
+terraform {
+  backend "azurerm" {
+    # Configuration provided at init time via GitHub Actions workflow:
+    # -backend-config="resource_group_name=..."
+    # -backend-config="storage_account_name=..."
+    # -backend-config="container_name=tfstate"
+    # -backend-config="key=dev.terraform.tfstate"
+    # -backend-config="use_oidc=true"
+  }
+}

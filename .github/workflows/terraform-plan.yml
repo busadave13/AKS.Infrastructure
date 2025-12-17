@@ -1,0 +1,225 @@
+# Terraform Plan Workflow
+# This workflow runs on pull requests to validate and plan Terraform changes
+# Uses OIDC/Workload Identity for secure, secretless authentication to Azure
+
+name: 'Terraform Plan'
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-*.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to plan'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+# Permissions required for OIDC authentication
+permissions:
+  id-token: write  # Required for requesting the JWT
+  contents: read   # Required for actions/checkout
+  pull-requests: write  # Required for posting plan comments
+
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  ARM_USE_OIDC: true
+  ARM_USE_AZUREAD: true
+
+jobs:
+  # Determine which environments changed
+  detect-changes:
+    name: 'Detect Changes'
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-envs.outputs.environments }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed environments
+        id: set-envs
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "environments=[\"${{ github.event.inputs.environment }}\"]" >> $GITHUB_OUTPUT
+          else
+            # Get list of changed files
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep '^terraform/' || true)
+            
+            # Determine which environments have changes
+            ENVS="[]"
+            if echo "$CHANGED_FILES" | grep -q 'terraform/environments/dev/' || echo "$CHANGED_FILES" | grep -q 'terraform/modules/' || echo "$CHANGED_FILES" | grep -q 'terraform/shared/'; then
+              ENVS=$(echo "$ENVS" | jq -c '. + ["dev"]')
+            fi
+            if echo "$CHANGED_FILES" | grep -q 'terraform/environments/staging/' || echo "$CHANGED_FILES" | grep -q 'terraform/modules/' || echo "$CHANGED_FILES" | grep -q 'terraform/shared/'; then
+              if [ -d "terraform/environments/staging" ]; then
+                ENVS=$(echo "$ENVS" | jq -c '. + ["staging"]')
+              fi
+            fi
+            if echo "$CHANGED_FILES" | grep -q 'terraform/environments/prod/' || echo "$CHANGED_FILES" | grep -q 'terraform/modules/' || echo "$CHANGED_FILES" | grep -q 'terraform/shared/'; then
+              if [ -d "terraform/environments/prod" ]; then
+                ENVS=$(echo "$ENVS" | jq -c '. + ["prod"]')
+              fi
+            fi
+            
+            # Default to dev if no specific environment detected
+            if [ "$ENVS" == "[]" ]; then
+              ENVS='["dev"]'
+            fi
+            
+            echo "environments=$ENVS" >> $GITHUB_OUTPUT
+          fi
+
+  # Terraform Plan for each environment
+  terraform-plan:
+    name: 'Plan - ${{ matrix.environment }}'
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: needs.detect-changes.outputs.environments != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ fromJson(needs.detect-changes.outputs.environments) }}
+    
+    # Use GitHub Environment for environment-specific secrets and protection rules
+    environment: ${{ matrix.environment }}
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform/environments/${{ matrix.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      # Authenticate to Azure using OIDC/Workload Identity
+      - name: Azure Login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TF_STATE_CONTAINER }}" \
+            -backend-config="key=${{ matrix.environment }}.terraform.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -backend-config="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -backend-config="client_id=${{ secrets.AZURE_CLIENT_ID }}"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -out=tfplan \
+            -var-file="terraform.tfvars" 2>&1 | tee plan_output.txt
+          
+          # Save the exit code
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        continue-on-error: true
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.environment }}
+          path: terraform/environments/${{ matrix.environment }}/tfplan
+          retention-days: 5
+
+      # Post plan results as PR comment
+      - name: Post Plan to PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('terraform/environments/${{ matrix.environment }}/plan_output.txt', 'utf8');
+            
+            // Truncate if too long
+            const maxLength = 60000;
+            let output = planOutput;
+            if (output.length > maxLength) {
+              output = output.substring(0, maxLength) + '\n\n... (truncated)';
+            }
+            
+            const body = `## Terraform Plan - \`${{ matrix.environment }}\`
+            
+            #### Format Check 🖌 \`${{ steps.fmt.outcome }}\`
+            #### Initialization ⚙️ \`${{ steps.init.outcome }}\`
+            #### Validation 🤖 \`${{ steps.validate.outcome }}\`
+            #### Plan 📖 \`${{ steps.plan.outcome }}\`
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${output}
+            \`\`\`
+            
+            </details>
+            
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      - name: Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  # Summary job for branch protection
+  plan-summary:
+    name: 'Plan Summary'
+    needs: [detect-changes, terraform-plan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check Plan Results
+        run: |
+          if [ "${{ needs.terraform-plan.result }}" == "failure" ]; then
+            echo "One or more Terraform plans failed"
+            exit 1
+          fi
+          echo "All Terraform plans completed successfully"

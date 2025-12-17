@@ -1,0 +1,199 @@
+# Terraform Apply Workflow
+# This workflow applies Terraform changes after PR merge or manual trigger
+# Uses OIDC/Workload Identity for secure, secretless authentication to Azure
+
+name: 'Terraform Apply'
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      plan_only:
+        description: 'Run plan only (no apply)'
+        required: false
+        default: false
+        type: boolean
+
+# Permissions required for OIDC authentication
+permissions:
+  id-token: write  # Required for requesting the JWT
+  contents: read   # Required for actions/checkout
+
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  ARM_USE_OIDC: true
+  ARM_USE_AZUREAD: true
+
+# Prevent concurrent deployments to the same environment
+concurrency:
+  group: terraform-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  # Determine which environments to deploy
+  detect-changes:
+    name: 'Detect Changes'
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-envs.outputs.environments }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed environments
+        id: set-envs
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "environments=[\"${{ github.event.inputs.environment }}\"]" >> $GITHUB_OUTPUT
+          else
+            # Get list of changed files in the last commit
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep '^terraform/' || true)
+            
+            # Determine which environments have changes
+            ENVS="[]"
+            if echo "$CHANGED_FILES" | grep -q 'terraform/environments/dev/' || echo "$CHANGED_FILES" | grep -q 'terraform/modules/' || echo "$CHANGED_FILES" | grep -q 'terraform/shared/'; then
+              ENVS=$(echo "$ENVS" | jq -c '. + ["dev"]')
+            fi
+            # Staging and prod require explicit workflow_dispatch for safety
+            
+            # Default to dev if no specific environment detected
+            if [ "$ENVS" == "[]" ]; then
+              ENVS='["dev"]'
+            fi
+            
+            echo "environments=$ENVS" >> $GITHUB_OUTPUT
+          fi
+
+  # Terraform Apply for each environment
+  terraform-apply:
+    name: 'Apply - ${{ matrix.environment }}'
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    if: needs.detect-changes.outputs.environments != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 1  # Deploy one environment at a time
+      matrix:
+        environment: ${{ fromJson(needs.detect-changes.outputs.environments) }}
+    
+    # Use GitHub Environment for environment-specific secrets and protection rules
+    environment: ${{ matrix.environment }}
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: terraform/environments/${{ matrix.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      # Authenticate to Azure using OIDC/Workload Identity
+      - name: Azure Login with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TF_STATE_CONTAINER }}" \
+            -backend-config="key=${{ matrix.environment }}.terraform.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -backend-config="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -backend-config="client_id=${{ secrets.AZURE_CLIENT_ID }}"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -out=tfplan \
+            -var-file="terraform.tfvars" \
+            -detailed-exitcode 2>&1 | tee plan_output.txt
+          
+          EXIT_CODE=$?
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Exit code 2 means there are changes to apply
+          # Exit code 0 means no changes
+          # Exit code 1 means error
+          if [ $EXIT_CODE -eq 1 ]; then
+            exit 1
+          fi
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Apply
+        id: apply
+        if: steps.plan.outputs.exitcode == '2' && github.event.inputs.plan_only != 'true'
+        run: |
+          terraform apply -auto-approve tfplan 2>&1 | tee apply_output.txt
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: No Changes
+        if: steps.plan.outputs.exitcode == '0'
+        run: echo "No changes detected. Infrastructure is up to date."
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tfplan-${{ matrix.environment }}-${{ github.run_number }}
+          path: |
+            terraform/environments/${{ matrix.environment }}/tfplan
+            terraform/environments/${{ matrix.environment }}/plan_output.txt
+          retention-days: 30
+
+  # Summary job
+  apply-summary:
+    name: 'Apply Summary'
+    needs: [detect-changes, terraform-apply]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check Apply Results
+        run: |
+          if [ "${{ needs.terraform-apply.result }}" == "failure" ]; then
+            echo "One or more Terraform applies failed"
+            exit 1
+          fi
+          echo "All Terraform applies completed successfully"

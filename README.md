@@ -57,8 +57,14 @@ This repository contains Terraform configurations for deploying a cost-optimized
 ```
 ├── .github/
 │   └── workflows/
-│       └── terraform.yml      # CI/CD pipeline
+│       ├── terraform-plan.yml   # PR validation and planning
+│       └── terraform-apply.yml  # Deployment on merge
 ├── terraform/
+│   ├── bootstrap/             # One-time setup for Workload Identity
+│   │   ├── main.tf            # Azure AD app, federated credentials
+│   │   ├── variables.tf       # Bootstrap variables
+│   │   ├── outputs.tf         # GitHub configuration values
+│   │   └── terraform.tfvars.example
 │   ├── environments/
 │   │   └── dev/
 │   │       ├── main.tf        # Root module composition
@@ -80,26 +86,134 @@ This repository contains Terraform configurations for deploying a cost-optimized
 
 - [Terraform](https://www.terraform.io/downloads.html) >= 1.6.0
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) >= 2.50.0
+- [GitHub CLI](https://cli.github.com/) (optional, for secret management)
 - Azure subscription with Owner or Contributor access
+- Permissions to create Azure AD applications (for Workload Identity setup)
 - (Optional) Azure AD group for cluster admin access
 
-## Quick Start
+## Authentication
 
-### 1. Clone the Repository
+This repository uses **Workload Identity (OIDC)** for secure, secretless authentication to Azure from GitHub Actions. This is more secure than using client secrets because:
 
-```bash
-git clone https://github.com/busadave13/AKS.Infrastructure.git
-cd AKS.Infrastructure
+- No secrets to manage, rotate, or potentially leak
+- Tokens are short-lived and scoped to specific workflows
+- Azure AD federated credentials validate the GitHub token issuer
+
+### Authentication Flow
+
+```
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│  GitHub Actions │         │   Azure AD      │         │     Azure       │
+│    Workflow     │         │  (Entra ID)     │         │   Resources     │
+└────────┬────────┘         └────────┬────────┘         └────────┬────────┘
+         │                           │                           │
+         │  1. Request OIDC Token    │                           │
+         │  (with job claims)        │                           │
+         ├──────────────────────────>│                           │
+         │                           │                           │
+         │  2. Validate federated    │                           │
+         │     credential subject    │                           │
+         │<──────────────────────────┤                           │
+         │                           │                           │
+         │  3. Exchange for Azure AD │                           │
+         │     access token          │                           │
+         ├──────────────────────────>│                           │
+         │                           │                           │
+         │  4. Use token to access   │                           │
+         │     Azure resources       │                           │
+         ├──────────────────────────────────────────────────────>│
+         │                           │                           │
 ```
 
-### 2. Authenticate to Azure
+## Setup Guide
+
+### Step 1: Bootstrap Azure Resources
+
+The bootstrap configuration creates the necessary Azure AD resources for Workload Identity:
 
 ```bash
+cd terraform/bootstrap
+
+# Copy and configure variables
+cp terraform.tfvars.example terraform.tfvars
+
+# Edit terraform.tfvars with your values:
+# - github_repository: "your-org/AKS.Infrastructure"
+# - github_repository_name: "AKS.Infrastructure"
+# - environment: "dev"
+
+# Authenticate to Azure
 az login
-az account set --subscription "<your-subscription-id>"
+
+# Initialize and apply
+terraform init
+terraform plan
+terraform apply
 ```
 
-### 3. Configure Variables
+The bootstrap creates:
+- Azure AD Application Registration
+- Service Principal
+- Federated Identity Credentials for:
+  - Pull requests
+  - Main branch pushes
+  - GitHub environment deployments
+- Azure Storage Account for Terraform state (with Azure AD auth)
+- Required RBAC role assignments
+
+### Step 2: Configure GitHub Repository
+
+After running the bootstrap, configure GitHub with the output values:
+
+**Option A: Using GitHub CLI (Recommended)**
+
+The bootstrap outputs a ready-to-use script:
+
+```bash
+# View the configuration commands
+terraform output github_cli_commands
+
+# Run the commands (example):
+gh secret set AZURE_CLIENT_ID --body "<client-id>"
+gh secret set AZURE_TENANT_ID --body "<tenant-id>"
+gh secret set AZURE_SUBSCRIPTION_ID --body "<subscription-id>"
+
+gh variable set TF_STATE_RESOURCE_GROUP --body "rg-terraform-state-dev"
+gh variable set TF_STATE_STORAGE_ACCOUNT --body "<storage-account-name>"
+gh variable set TF_STATE_CONTAINER --body "tfstate"
+```
+
+**Option B: Using GitHub Web UI**
+
+1. Go to **Settings** → **Secrets and variables** → **Actions**
+2. Add the following **Secrets**:
+   - `AZURE_CLIENT_ID`: Application (Client) ID from bootstrap output
+   - `AZURE_TENANT_ID`: Azure AD Tenant ID from bootstrap output
+   - `AZURE_SUBSCRIPTION_ID`: Azure Subscription ID from bootstrap output
+3. Add the following **Variables**:
+   - `TF_STATE_RESOURCE_GROUP`: Resource group name from bootstrap output
+   - `TF_STATE_STORAGE_ACCOUNT`: Storage account name from bootstrap output
+   - `TF_STATE_CONTAINER`: `tfstate`
+
+### Step 3: Create GitHub Environment (Optional but Recommended)
+
+For environment-specific deployments with protection rules:
+
+1. Go to **Settings** → **Environments** → **New environment**
+2. Create environment named `dev`
+3. Add the same secrets to the environment
+4. (Optional) Configure protection rules:
+   - Required reviewers for production environments
+   - Wait timer for staged deployments
+
+### Step 4: Configure Infrastructure Variables
+
+```bash
+cd terraform/environments/dev
+
+# The terraform.tfvars should already exist
+# Update it with your specific values:
+```
 
 Edit `terraform/environments/dev/terraform.tfvars`:
 
@@ -111,22 +225,66 @@ acr_name = "acryourorgdevwestus2"
 admin_group_object_ids = ["<your-aad-group-object-id>"]
 ```
 
-### 4. Initialize and Deploy
+### Step 5: Deploy
+
+Push changes to trigger the CI/CD pipeline:
 
 ```bash
-cd terraform/environments/dev
+# Create a feature branch
+git checkout -b feature/initial-deployment
 
-# Initialize Terraform
-terraform init
+# Commit your changes
+git add .
+git commit -m "Configure infrastructure deployment"
 
-# Preview changes
-terraform plan
-
-# Apply changes
-terraform apply
+# Push and create PR
+git push -u origin feature/initial-deployment
+gh pr create --title "Initial AKS deployment" --body "Deploy AKS cluster"
 ```
 
-### 5. Connect to the Cluster
+The PR will show a Terraform plan in the comments. After review and merge, the apply workflow will deploy the infrastructure.
+
+## CI/CD Pipeline
+
+### Terraform Plan Workflow (`.github/workflows/terraform-plan.yml`)
+
+Triggered on:
+- Pull requests to `main` branch
+- Manual workflow dispatch
+
+Features:
+- Format validation
+- Terraform validate
+- Plan output as PR comment
+- Artifact upload for plan file
+
+### Terraform Apply Workflow (`.github/workflows/terraform-apply.yml`)
+
+Triggered on:
+- Push to `main` branch (merge)
+- Manual workflow dispatch
+
+Features:
+- Uses OIDC for secure authentication
+- Concurrency control (one deployment at a time)
+- Plan with detailed exit codes
+- Automatic apply on changes
+- Artifact retention for audit
+
+### GitHub Secrets and Variables
+
+| Type | Name | Description |
+|------|------|-------------|
+| Secret | `AZURE_CLIENT_ID` | Azure AD Application (Client) ID |
+| Secret | `AZURE_TENANT_ID` | Azure AD Tenant ID |
+| Secret | `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
+| Variable | `TF_STATE_RESOURCE_GROUP` | Terraform state resource group |
+| Variable | `TF_STATE_STORAGE_ACCOUNT` | Terraform state storage account |
+| Variable | `TF_STATE_CONTAINER` | Terraform state container name |
+
+## Connect to the Cluster
+
+After deployment:
 
 ```bash
 # Get credentials
@@ -172,35 +330,6 @@ spec:
 EOF
 ```
 
-## CI/CD Pipeline
-
-The GitHub Actions workflow (`.github/workflows/terraform.yml`) provides:
-
-- **Format Check**: Validates Terraform formatting
-- **Validate**: Syntax and configuration validation
-- **Plan**: Creates execution plan on PRs (commented on PR)
-- **Apply**: Deploys changes when merged to main
-
-### Required GitHub Secrets
-
-Configure these secrets in your GitHub repository:
-
-| Secret | Description |
-|--------|-------------|
-| `AZURE_CLIENT_ID` | Service Principal App ID |
-| `AZURE_CLIENT_SECRET` | Service Principal Secret |
-| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
-| `AZURE_TENANT_ID` | Azure AD Tenant ID |
-
-### Create Service Principal
-
-```bash
-az ad sp create-for-rbac \
-  --name "sp-github-aks-infrastructure" \
-  --role Contributor \
-  --scopes /subscriptions/<subscription-id>
-```
-
 ## Estimated Monthly Cost
 
 | Resource | Cost (Est.) |
@@ -209,6 +338,7 @@ az ad sp create-for-rbac \
 | AKS User Pool (1x B2ms Spot) | ~$15-20 |
 | Container Registry (Basic) | ~$5 |
 | Log Analytics (5GB/day free) | ~$0-10 |
+| Storage Account (State) | ~$1 |
 | **Total** | **~$80-95/month** |
 
 ## Deploying Istio with GitOps
@@ -223,6 +353,18 @@ Example Flux configuration for Istio is available in the [Istio documentation](h
 
 ## Troubleshooting
 
+### Workflow fails with authentication error
+
+Ensure:
+1. Federated credentials are correctly configured in Azure AD
+2. The subject claim matches (repo, branch, or environment)
+3. GitHub secrets have the correct values
+
+```bash
+# Verify the Azure AD app configuration
+az ad app federated-credential list --id <app-id>
+```
+
 ### Cannot connect to cluster
 
 ```bash
@@ -231,6 +373,18 @@ az login
 
 # Get fresh credentials
 az aks get-credentials --resource-group rg-aks-dev-westus2 --name aks-aks-dev-westus2 --overwrite-existing
+```
+
+### Terraform state access denied
+
+If the GitHub Actions workflow fails with state access denied:
+1. Verify the service principal has `Storage Blob Data Contributor` role on the storage account
+2. Check that the federated credential subjects match the workflow context
+
+```bash
+# Verify role assignments for the service principal
+az role assignment list --assignee <service-principal-object-id> \
+  --scope /subscriptions/<sub-id>/resourceGroups/rg-terraform-state-dev
 ```
 
 ### Spot nodes not scheduling pods
@@ -256,6 +410,24 @@ kubectl get gitrepositories -A
 kubectl logs -n flux-system deployment/source-controller
 kubectl logs -n flux-system deployment/kustomize-controller
 ```
+
+## Security Considerations
+
+### Workload Identity Best Practices
+
+1. **Scope federated credentials narrowly**: Only allow specific branches/environments
+2. **Use GitHub Environments**: Add protection rules for production deployments
+3. **Review role assignments**: Grant minimum required permissions
+4. **Enable Azure AD sign-in logs**: Monitor for suspicious activity
+
+### Storage Account Security
+
+The Terraform state storage account is configured with:
+- Azure AD authentication only (no shared keys)
+- TLS 1.2 minimum
+- Blob versioning enabled
+- Soft delete for recovery
+- No public blob access
 
 ## Contributing
 
