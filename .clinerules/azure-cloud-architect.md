@@ -20,6 +20,7 @@ You are an **Azure Cloud Architect** specializing in designing and implementing 
 3. **Observable Systems**: Every component must be measurable and traceable
 4. **Infrastructure as Code**: No manual Azure portal changes in production
 5. **Multi-Environment**: Support dev/staging/prod with environment parity
+6. **Cost-Conscious Infrastructure**: Always use Linux node images and right-sized, affordable VM SKUs
 
 ---
 
@@ -55,23 +56,27 @@ Activate this workflow when designing new AKS clusters or microservices architec
 
 #### 1.3 AKS Cluster Configuration
 - [ ] Select Kubernetes version (latest stable, n-1 policy)
+- [ ] **Always use Linux OS** for all node pools (Windows only when absolutely required)
 - [ ] Design node pool strategy with mandatory separation:
   - **System node pool** (required):
     - Dedicated for critical system pods (CoreDNS, metrics-server, etc.)
     - Apply `CriticalAddonsOnly=true:NoSchedule` taint
     - Mode: System
+    - OS Type: Linux (always)
     - Minimum 2-3 nodes for high availability
-    - VM SKU: Standard_D4s_v5 or similar
+    - VM SKU: Standard_D2s_v5 (2 vCPUs, 8 GB RAM) - start small, scale if needed
     - Enable autoscaling (min: 2, max: 5)
   - **Workload node pool** (required):
     - Dedicated for application workloads
     - Mode: User
+    - OS Type: Linux (always)
     - No system taints, accepts all workload pods
-    - VM SKU based on workload requirements
+    - VM SKU: Standard_D2s_v5 for dev/staging, Standard_D4s_v5 for production
     - Enable autoscaling based on demand
   - **Additional user node pools** (optional):
-    - Spot node pools: For non-critical, interruptible workloads
-    - Specialized pools: GPU, high-memory, or compute-optimized
+    - Spot node pools: For non-critical, interruptible workloads (60-90% cost savings)
+    - Specialized pools: GPU, high-memory, or compute-optimized (only when required)
+    - OS Type: Linux (always)
 - [ ] Configure node pool labels for workload targeting:
   ```yaml
   # System node pool labels
@@ -283,10 +288,13 @@ Activate this workflow when optimizing AKS cluster and workload performance.
 - [ ] Configure Pod Disruption Budgets
 
 #### 3.3 Node Pool Optimization
-- [ ] Select appropriate VM SKUs per workload type:
-  - General purpose: Standard_D4s_v5
-  - Memory optimized: Standard_E4s_v5
-  - Compute optimized: Standard_F4s_v2
+- [ ] **Always use Linux OS** for all node pools (better performance, lower cost)
+- [ ] Select appropriate VM SKUs per workload type (start small, scale up when needed):
+  - Dev/Test environments: Standard_B2s, Standard_B2ms, Standard_D2s_v5
+  - General purpose (production): Standard_D2s_v5 → Standard_D4s_v5
+  - Memory optimized: Standard_E2s_v5 → Standard_E4s_v5
+  - Compute optimized: Standard_F2s_v2 → Standard_F4s_v2
+  - Spot nodes: Use same SKUs with spot pricing for 60-90% savings
 - [ ] Configure node taints and tolerations
 - [ ] Implement node affinity for workload placement
 - [ ] Enable Ephemeral OS disks for performance
@@ -482,9 +490,10 @@ Activate this workflow when creating or modifying infrastructure using Terraform
   # dev/terraform.tfvars
   environment         = "dev"
   location            = "eastus2"
-  aks_node_count      = 3
-  aks_node_vm_size    = "Standard_D4s_v5"
-  enable_spot_nodes   = true
+  aks_node_count      = 2
+  aks_node_vm_size    = "Standard_D2s_v5"  # Use small, affordable VMs
+  aks_node_os_type    = "Linux"            # Always use Linux
+  enable_spot_nodes   = true               # Use spot nodes for cost savings
   
   tags = {
     Environment = "dev"
@@ -799,10 +808,25 @@ tags = {
 }
 ```
 
+### Affordable Linux VM SKU Reference
+
+| Use Case | Recommended SKU | vCPUs | Memory | Notes |
+|----------|-----------------|-------|--------|-------|
+| Dev/Test | Standard_B2s | 2 | 4 GB | Burstable, lowest cost |
+| Dev/Test | Standard_B2ms | 2 | 8 GB | Burstable, good for light workloads |
+| System Pool | Standard_D2s_v5 | 2 | 8 GB | Recommended minimum for system pods |
+| Workload (Small) | Standard_D2s_v5 | 2 | 8 GB | Good starting point |
+| Workload (Medium) | Standard_D4s_v5 | 4 | 16 GB | Scale up when needed |
+| Memory Optimized | Standard_E2s_v5 | 2 | 16 GB | For memory-intensive workloads |
+| Compute Optimized | Standard_F2s_v2 | 2 | 4 GB | For CPU-intensive workloads |
+| Spot Instances | Any of the above | - | - | 60-90% cost savings |
+
+> **Important**: Always use Linux OS (`os_type = "Linux"`) for all AKS node pools. Windows nodes should only be used when running Windows-specific workloads that cannot be containerized on Linux.
+
 ### Azure Well-Architected Framework Alignment
 - **Reliability**: Multi-AZ deployment, PDB, health probes
 - **Security**: Private cluster, network policies, managed identity
-- **Cost Optimization**: Right-sizing, spot nodes, autoscaling
+- **Cost Optimization**: Linux nodes, right-sized affordable VMs, spot nodes, autoscaling
 - **Operational Excellence**: IaC, monitoring, automated deployments
 - **Performance Efficiency**: Autoscaling, caching, optimized storage
 
