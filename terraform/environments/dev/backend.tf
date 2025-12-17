@@ -8,14 +8,14 @@
 # az storage container create -n tfstate --account-name stterraformstate
 #
 
-# terraform {
-#   backend "azurerm" {
-#     resource_group_name  = "rg-terraform-state"
-#     storage_account_name = "stterraformstate"
-#     container_name       = "tfstate"
-#     key                  = "aks-dev.terraform.tfstate"
-#   }
-# }
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "rg-terraform-state"
+    storage_account_name = "stterraformstate"
+    container_name       = "tfstate"
+    key                  = "aks-dev.terraform.tfstate"
+  }
+}
 
 # For local development, use local state (default)
 # When ready for production, enable remote state above
