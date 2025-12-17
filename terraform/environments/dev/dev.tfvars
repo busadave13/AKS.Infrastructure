@@ -40,7 +40,7 @@ grafana_admin_object_ids = []
 #--------------------------------------------------------------
 # AKS
 #--------------------------------------------------------------
-kubernetes_version = "1.30"
+kubernetes_version = "1.32"
 
 # Add your Azure AD group object IDs for AKS admin access
 aks_admin_group_object_ids = []
