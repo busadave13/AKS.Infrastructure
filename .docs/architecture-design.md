@@ -23,7 +23,7 @@
 7. [Security Design](#7-security-design)
 8. [Terraform Project Structure](#8-terraform-project-structure)
 9. [GitOps Configuration (Flux v2)](#9-gitops-configuration-flux-v2)
-10. [Azure DevOps Pipeline Configuration](#10-azure-devops-pipeline-configuration)
+10. [GitHub Actions CI/CD Configuration](#10-github-actions-cicd-configuration)
 11. [Resource Naming Conventions](#11-resource-naming-conventions)
 12. [Cost Estimation](#12-cost-estimation)
 13. [Implementation Roadmap](#13-implementation-roadmap)
@@ -46,7 +46,7 @@ This document outlines the architecture design for a Terraform Infrastructure as
 | **Security by Default** | Implement foundational security controls appropriate for development |
 | **Full Observability** | Enable comprehensive monitoring, logging, and metrics collection |
 | **GitOps Ready** | Automated deployments via Flux v2 for consistent, declarative configuration |
-| **Infrastructure as Code** | All infrastructure managed through Terraform with Azure DevOps CI/CD |
+| **Infrastructure as Code** | All infrastructure managed through Terraform with GitHub Actions CI/CD |
 
 ### 1.3 Scope
 
@@ -57,7 +57,7 @@ This document outlines the architecture design for a Terraform Infrastructure as
 | Azure Container Registry (Basic) | Premium ACR features (geo-replication) |
 | Full observability stack | Advanced APM solutions |
 | Flux v2 GitOps | ArgoCD or other GitOps tools |
-| Azure DevOps pipelines | GitHub Actions |
+| GitHub Actions CI/CD | Azure DevOps pipelines |
 | Development environment | Staging/Production environments |
 
 ### 1.4 Key Design Decisions
@@ -114,8 +114,8 @@ flowchart TB
     end
     
     DEV[("Developer<br/>Workstation")] --> AKS
-    ADO[("Azure DevOps<br/>Pipelines")] --> ACR
-    ADO --> AKS
+    GHA[("GitHub Actions<br/>Workflows")] --> ACR
+    GHA --> AKS
     
     AKS --> ACR
     AKS --> KV
@@ -703,8 +703,8 @@ workload_node_spot     = true
 # Monitoring
 log_retention_days     = 30
 
-# GitOps
-gitops_repo_url        = "https://github.com/busadave13/AKS.Infrastructure.git"
+# GitOps (Points to separate GitOps repository)
+gitops_repo_url        = "https://github.com/busadave13/AKS.GitOps.git"
 gitops_branch          = "main"
 ```
 
@@ -735,12 +735,19 @@ flowchart TD
 
 ## 9. GitOps Configuration (Flux v2)
 
+> **Note**: GitOps configuration is maintained in a **separate repository** to enable independent versioning and access control for Kubernetes manifests. The Terraform `gitops` module in this repository configures Flux to sync from the external GitOps repository.
+
 ### 9.1 GitOps Architecture
 
 ```mermaid
 flowchart LR
-    subgraph "Git Repository"
-        REPO[("GitHub<br/>AKS.Infrastructure")]
+    subgraph "Infrastructure Repository"
+        INFRA_REPO[("GitHub<br/>AKS.Infrastructure")]
+        TF[Terraform Modules]
+    end
+    
+    subgraph "GitOps Repository (Separate)"
+        GITOPS_REPO[("GitHub<br/>AKS.GitOps")]
         
         subgraph "Repository Structure"
             INFRA[infrastructure/]
@@ -767,7 +774,9 @@ flowchart LR
         end
     end
     
-    REPO --> SC
+    INFRA_REPO --> TF
+    TF -->|Configures Flux| SC
+    GITOPS_REPO --> SC
     SC --> KC
     SC --> HC
     KC --> NS
@@ -777,7 +786,7 @@ flowchart LR
     KC --> SVC
     KC --> CJ
     
-    NC --> REPO
+    NC --> GITOPS_REPO
 ```
 
 ### 9.2 Flux Extension Configuration
@@ -801,10 +810,17 @@ resource "azurerm_kubernetes_cluster_extension" "flux" {
 }
 ```
 
-### 9.3 Git Repository Structure for GitOps
+### 9.3 GitOps Repository Structure (Separate Repository)
+
+> **Repository**: The GitOps configuration is maintained in a separate repository (e.g., `AKS.GitOps`). This separation provides:
+> - **Independent versioning**: Kubernetes manifests can be updated without changing infrastructure code
+> - **Access control**: Different teams can have different permissions for infrastructure vs. application configs
+> - **Release management**: Application deployments can follow their own release cadence
+
+**Recommended GitOps Repository Structure:**
 
 ```
-gitops/
+AKS.GitOps/                          # Separate repository
 ├── clusters/
 │   └── dev/
 │       └── kustomization.yaml      # References infrastructure and apps
@@ -852,6 +868,8 @@ gitops/
 
 ### 9.4 Flux Kustomization Configuration
 
+> **Note**: The `gitops_repo_url` variable should point to the separate GitOps repository (e.g., `https://github.com/org/AKS.GitOps.git`), not this infrastructure repository.
+
 ```hcl
 # modules/gitops/main.tf (continued)
 
@@ -862,7 +880,7 @@ resource "azurerm_kubernetes_flux_configuration" "platform" {
   scope      = "cluster"
 
   git_repository {
-    url                      = var.gitops_repo_url
+    url                      = var.gitops_repo_url  # Points to separate GitOps repository
     reference_type           = "branch"
     reference_value          = var.gitops_branch
     https_user               = "git"
@@ -873,7 +891,7 @@ resource "azurerm_kubernetes_flux_configuration" "platform" {
 
   kustomizations {
     name                       = "infrastructure"
-    path                       = "./gitops/infrastructure/overlays/dev"
+    path                       = "./infrastructure/overlays/${var.environment}"
     sync_interval_in_seconds   = 120
     retry_interval_in_seconds  = 60
     prune                      = true
@@ -881,7 +899,7 @@ resource "azurerm_kubernetes_flux_configuration" "platform" {
 
   kustomizations {
     name                       = "apps"
-    path                       = "./gitops/apps/overlays/dev"
+    path                       = "./apps/overlays/${var.environment}"
     sync_interval_in_seconds   = 60
     retry_interval_in_seconds  = 60
     prune                      = true
@@ -894,30 +912,32 @@ resource "azurerm_kubernetes_flux_configuration" "platform" {
 
 ---
 
-## 10. Azure DevOps Pipeline Configuration
+## 10. GitHub Actions CI/CD Configuration
 
 ### 10.1 Pipeline Architecture
 
 ```mermaid
 flowchart LR
-    subgraph "Azure DevOps"
+    subgraph "GitHub"
         subgraph "Repository"
             CODE[Terraform Code]
         end
         
-        subgraph "Pipelines"
-            VAL[Validate Stage]
-            PLAN[Plan Stage]
-            APPLY[Apply Stage]
+        subgraph "Actions Workflow"
+            VAL[Validate Job]
+            PLAN[Plan Job]
+            APPLY[Apply Job]
+            DESTROY[Destroy Job]
         end
         
-        subgraph "Library"
-            VG[Variable Groups]
-            SC[Service Connections]
+        subgraph "Configuration"
+            SECRETS[Repository Secrets]
+            OIDC[OIDC Federation]
         end
     end
     
     subgraph "Azure"
+        ENTRA[Azure Entra ID<br/>App Registration]
         STATE[(Terraform State<br/>Storage Account)]
         RG[Resource Group]
     end
@@ -926,199 +946,281 @@ flowchart LR
     VAL --> PLAN
     PLAN --> APPLY
     
-    VG --> VAL
-    VG --> PLAN
-    VG --> APPLY
-    
-    SC --> PLAN
-    SC --> APPLY
+    OIDC --> ENTRA
+    SECRETS --> VAL
+    SECRETS --> PLAN
+    SECRETS --> APPLY
     
     PLAN --> STATE
     APPLY --> STATE
     APPLY --> RG
 ```
 
-### 10.2 Pipeline YAML
+### 10.2 Workflow YAML
 
 ```yaml
-# azure-pipelines.yml
-name: 'Terraform-$(Date:yyyyMMdd)$(Rev:.r)'
+# .github/workflows/terraform.yml
+name: 'Terraform'
 
-trigger:
-  branches:
-    include:
+on:
+  push:
+    branches:
       - main
-  paths:
-    include:
-      - terraform/**
-
-pr:
-  branches:
-    include:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  pull_request:
+    branches:
       - main
-  paths:
-    include:
-      - terraform/**
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action to perform'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
 
-parameters:
-  - name: environment
-    displayName: 'Environment'
-    type: string
-    default: 'dev'
-    values:
-      - dev
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
 
-variables:
-  - group: terraform-${{ parameters.environment }}
-  - name: terraformVersion
-    value: '1.6.0'
-  - name: workingDirectory
-    value: 'terraform/environments/${{ parameters.environment }}'
+env:
+  TERRAFORM_VERSION: '1.6.0'
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
 
-stages:
-  - stage: Validate
-    displayName: 'Validate'
-    jobs:
-      - job: TerraformValidate
-        displayName: 'Terraform Validate'
-        pool:
-          vmImage: 'ubuntu-latest'
-        steps:
-          - checkout: self
-            fetchDepth: 1
+concurrency:
+  group: terraform-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
 
-          - task: TerraformInstaller@1
-            displayName: 'Install Terraform $(terraformVersion)'
-            inputs:
-              terraformVersion: '$(terraformVersion)'
+jobs:
+  validate:
+    name: 'Validate'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/environments/dev
 
-          - script: terraform fmt -check -recursive
-            displayName: 'Terraform Format Check'
-            workingDirectory: 'terraform'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-          - task: TerraformTaskV4@4
-            displayName: 'Terraform Init'
-            inputs:
-              provider: 'azurerm'
-              command: 'init'
-              workingDirectory: '$(workingDirectory)'
-              backendServiceArm: 'azure-service-connection'
-              backendAzureRmResourceGroupName: 'rg-terraform-state'
-              backendAzureRmStorageAccountName: 'stterraformstatewus3'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'aks-platform-${{ parameters.environment }}.terraform.tfstate'
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-          - task: TerraformTaskV4@4
-            displayName: 'Terraform Validate'
-            inputs:
-              provider: 'azurerm'
-              command: 'validate'
-              workingDirectory: '$(workingDirectory)'
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: terraform
 
-  - stage: Plan
-    displayName: 'Plan'
-    dependsOn: Validate
-    jobs:
-      - job: TerraformPlan
-        displayName: 'Terraform Plan'
-        pool:
-          vmImage: 'ubuntu-latest'
-        steps:
-          - checkout: self
-            fetchDepth: 1
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-          - task: TerraformInstaller@1
-            displayName: 'Install Terraform $(terraformVersion)'
-            inputs:
-              terraformVersion: '$(terraformVersion)'
+      - name: Terraform Init
+        run: terraform init
 
-          - task: TerraformTaskV4@4
-            displayName: 'Terraform Init'
-            inputs:
-              provider: 'azurerm'
-              command: 'init'
-              workingDirectory: '$(workingDirectory)'
-              backendServiceArm: 'azure-service-connection'
-              backendAzureRmResourceGroupName: 'rg-terraform-state'
-              backendAzureRmStorageAccountName: 'stterraformstatewus3'
-              backendAzureRmContainerName: 'tfstate'
-              backendAzureRmKey: 'aks-platform-${{ parameters.environment }}.terraform.tfstate'
+      - name: Terraform Validate
+        run: terraform validate -no-color
 
-          - task: TerraformTaskV4@4
-            displayName: 'Terraform Plan'
-            inputs:
-              provider: 'azurerm'
-              command: 'plan'
-              workingDirectory: '$(workingDirectory)'
-              environmentServiceNameAzureRM: 'azure-service-connection'
-              commandOptions: '-out=$(Build.ArtifactStagingDirectory)/tfplan'
+  plan:
+    name: 'Plan'
+    runs-on: ubuntu-latest
+    needs: validate
+    defaults:
+      run:
+        working-directory: terraform/environments/dev
 
-          - task: PublishPipelineArtifact@1
-            displayName: 'Publish Terraform Plan'
-            inputs:
-              targetPath: '$(Build.ArtifactStagingDirectory)/tfplan'
-              artifact: 'tfplan-${{ parameters.environment }}'
-              publishLocation: 'pipeline'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - stage: Apply
-    displayName: 'Apply'
-    dependsOn: Plan
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-    jobs:
-      - deployment: TerraformApply
-        displayName: 'Terraform Apply'
-        pool:
-          vmImage: 'ubuntu-latest'
-        environment: '${{ parameters.environment }}'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - checkout: self
-                  fetchDepth: 1
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-                - task: TerraformInstaller@1
-                  displayName: 'Install Terraform $(terraformVersion)'
-                  inputs:
-                    terraformVersion: '$(terraformVersion)'
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-                - task: DownloadPipelineArtifact@2
-                  displayName: 'Download Terraform Plan'
-                  inputs:
-                    artifactName: 'tfplan-${{ parameters.environment }}'
-                    targetPath: '$(Pipeline.Workspace)/tfplan'
+      - name: Terraform Init
+        run: terraform init
 
-                - task: TerraformTaskV4@4
-                  displayName: 'Terraform Init'
-                  inputs:
-                    provider: 'azurerm'
-                    command: 'init'
-                    workingDirectory: '$(workingDirectory)'
-                    backendServiceArm: 'azure-service-connection'
-                    backendAzureRmResourceGroupName: 'rg-terraform-state'
-                    backendAzureRmStorageAccountName: 'stterraformstatewus3'
-                    backendAzureRmContainerName: 'tfstate'
-                    backendAzureRmKey: 'aks-platform-${{ parameters.environment }}.terraform.tfstate'
+      - name: Terraform Plan
+        run: terraform plan -detailed-exitcode -no-color -out=tfplan
 
-                - task: TerraformTaskV4@4
-                  displayName: 'Terraform Apply'
-                  inputs:
-                    provider: 'azurerm'
-                    command: 'apply'
-                    workingDirectory: '$(workingDirectory)'
-                    environmentServiceNameAzureRM: 'azure-service-connection'
-                    commandOptions: '$(Pipeline.Workspace)/tfplan/tfplan'
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-dev-${{ github.run_id }}
+          path: terraform/environments/dev/tfplan
+          retention-days: 5
+
+  apply:
+    name: 'Apply'
+    runs-on: ubuntu-latest
+    needs: plan
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+    defaults:
+      run:
+        working-directory: terraform/environments/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-dev-${{ github.run_id }}
+          path: terraform/environments/dev
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+  destroy:
+    name: 'Destroy'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+    defaults:
+      run:
+        working-directory: terraform/environments/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
 ```
 
-### 10.3 Azure DevOps Configuration Checklist
+### 10.3 GitHub Actions Configuration
 
-| Item | Description |
-|------|-------------|
-| Service Connection | Azure Resource Manager connection with Contributor access |
-| Variable Group | `terraform-dev` with ARM credentials |
-| Environment | `dev` environment for deployment approvals |
-| Agent Pool | Microsoft-hosted ubuntu-latest |
-| Terraform Extension | Install from Azure DevOps Marketplace |
+#### Required Repository Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `AZURE_CLIENT_ID` | Azure AD App Registration Client ID |
+| `AZURE_TENANT_ID` | Azure AD Tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure Subscription ID |
+
+#### OIDC Federation Setup
+
+1. **Create Azure AD App Registration**:
+   ```bash
+   az ad app create --display-name "github-oidc-aks-infrastructure"
+   ```
+
+2. **Create Federated Credential**:
+   ```bash
+   az ad app federated-credential create \
+     --id <app-object-id> \
+     --parameters '{
+       "name": "github-main-branch",
+       "issuer": "https://token.actions.githubusercontent.com",
+       "subject": "repo:busadave13/AKS.Infrastructure:ref:refs/heads/main",
+       "audiences": ["api://AzureADTokenExchange"]
+     }'
+   ```
+
+3. **Create Service Principal and Assign Roles**:
+   ```bash
+   az ad sp create --id <app-client-id>
+   az role assignment create \
+     --assignee <app-client-id> \
+     --role "Contributor" \
+     --scope "/subscriptions/<subscription-id>"
+   ```
+
+#### Workflow Triggers
+
+| Trigger | Behavior |
+|---------|----------|
+| Push to `main` | Validate → Plan → Apply |
+| Pull Request to `main` | Validate → Plan (with PR comment) |
+| Manual (`workflow_dispatch`) | User selects action (plan/apply/destroy) |
+
+### 10.4 GitHub CLI Reference
+
+```bash
+# Install GitHub CLI
+winget install GitHub.cli
+
+# Authenticate
+gh auth login
+
+# Trigger workflow manually
+gh workflow run terraform.yml -f action=plan -f environment=dev
+
+# View workflow runs
+gh run list --workflow=terraform.yml
+
+# View workflow run details
+gh run view <run-id>
+
+# Download artifacts
+gh run download <run-id> -n tfplan-dev-<run-id>
+
+# View workflow logs
+gh run view <run-id> --log
+```
 
 ---
 
@@ -1213,16 +1315,16 @@ gantt
     title Phase 1: Foundation
     dateFormat  YYYY-MM-DD
     section Infrastructure
-    Create Azure DevOps Project       :a1, 2024-01-01, 1d
-    Configure Service Connection      :a2, after a1, 1d
+    Configure GitHub Repository       :a1, 2024-01-01, 1d
+    Set up OIDC Federation           :a2, after a1, 1d
     Set up Terraform State Storage    :a3, after a2, 1d
     Create Terraform Modules          :a4, after a3, 3d
 ```
 
 | Task | Description | Owner |
 |------|-------------|-------|
-| 1.1 | Create Azure DevOps project and repository | Platform Team |
-| 1.2 | Configure Azure service connection | Platform Team |
+| 1.1 | Configure GitHub repository and branch protection | Platform Team |
+| 1.2 | Set up Azure OIDC federation for GitHub Actions | Platform Team |
 | 1.3 | Create Terraform state storage account | Platform Team |
 | 1.4 | Develop Terraform modules (networking, AKS, ACR, Key Vault) | Platform Team |
 | 1.5 | Create development environment configuration | Platform Team |

@@ -12,7 +12,7 @@ You are an **Azure Cloud Architect** specializing in designing and implementing 
 - Infrastructure as Code using Terraform
 - GitOps with Flux v2 for Kubernetes configuration management
 - Istio service mesh implementation
-- Azure DevOps YAML CI/CD pipelines
+- GitHub Actions CI/CD workflows
 - Azure Container Registry management
 
 ### Design Principles
@@ -512,150 +512,172 @@ Activate this workflow when creating or modifying infrastructure using Terraform
 - [ ] Configure environment-specific network ranges
 - [ ] Set appropriate SKUs per environment
 
-#### 5.4 Azure DevOps YAML Pipelines
-- [ ] Create pipeline for Terraform operations:
+#### 5.4 GitHub Actions Workflows
+- [ ] Create workflow for Terraform operations:
   ```yaml
-  # azure-pipelines.yml
-  name: 'Terraform-$(Date:yyyyMMdd)$(Rev:.r)'
-  
-  trigger:
-    branches:
-      include:
+  # .github/workflows/terraform.yml
+  name: 'Terraform'
+
+  on:
+    push:
+      branches:
         - main
-    paths:
-      include:
-        - terraform/**
-  
-  pr:
-    branches:
-      include:
+      paths:
+        - 'terraform/**'
+        - '.github/workflows/terraform.yml'
+    pull_request:
+      branches:
         - main
-    paths:
-      include:
-        - terraform/**
-  
-  parameters:
-    - name: environment
-      displayName: 'Environment'
-      type: string
-      default: 'dev'
-      values:
-        - dev
-        - staging
-        - prod
-  
-  variables:
-    - group: terraform-${{ parameters.environment }}  # Variable group containing ARM credentials
-    - name: terraformVersion
-      value: '1.6.0'
-    - name: workingDirectory
-      value: 'terraform/environments/${{ parameters.environment }}'
-  
-  stages:
-    - stage: Validate
-      displayName: 'Validate & Plan'
-      jobs:
-        - job: TerraformPlan
-          displayName: 'Terraform Plan'
-          pool:
-            vmImage: 'ubuntu-latest'
-          steps:
-            - checkout: self
-              fetchDepth: 1
-  
-            - task: TerraformInstaller@1
-              displayName: 'Install Terraform $(terraformVersion)'
-              inputs:
-                terraformVersion: '$(terraformVersion)'
-  
-            - task: TerraformTaskV4@4
-              displayName: 'Terraform Init'
-              inputs:
-                provider: 'azurerm'
-                command: 'init'
-                workingDirectory: '$(workingDirectory)'
-                backendServiceArm: 'azure-service-connection'
-                backendAzureRmResourceGroupName: 'rg-terraform-state'
-                backendAzureRmStorageAccountName: 'stterraformstate'
-                backendAzureRmContainerName: 'tfstate'
-                backendAzureRmKey: 'aks-${{ parameters.environment }}.terraform.tfstate'
-  
-            - task: TerraformTaskV4@4
-              displayName: 'Terraform Validate'
-              inputs:
-                provider: 'azurerm'
-                command: 'validate'
-                workingDirectory: '$(workingDirectory)'
-  
-            - task: TerraformTaskV4@4
-              displayName: 'Terraform Plan'
-              inputs:
-                provider: 'azurerm'
-                command: 'plan'
-                workingDirectory: '$(workingDirectory)'
-                environmentServiceNameAzureRM: 'azure-service-connection'
-                commandOptions: '-out=$(Build.ArtifactStagingDirectory)/tfplan'
-  
-            - task: PublishPipelineArtifact@1
-              displayName: 'Publish Terraform Plan'
-              inputs:
-                targetPath: '$(Build.ArtifactStagingDirectory)/tfplan'
-                artifact: 'tfplan-${{ parameters.environment }}'
-                publishLocation: 'pipeline'
-  
-    - stage: Apply
-      displayName: 'Apply'
-      dependsOn: Validate
-      condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-      jobs:
-        - deployment: TerraformApply
-          displayName: 'Terraform Apply'
-          pool:
-            vmImage: 'ubuntu-latest'
-          environment: '${{ parameters.environment }}'  # Uses ADO environment for approvals
-          strategy:
-            runOnce:
-              deploy:
-                steps:
-                  - checkout: self
-                    fetchDepth: 1
-  
-                  - task: TerraformInstaller@1
-                    displayName: 'Install Terraform $(terraformVersion)'
-                    inputs:
-                      terraformVersion: '$(terraformVersion)'
-  
-                  - task: DownloadPipelineArtifact@2
-                    displayName: 'Download Terraform Plan'
-                    inputs:
-                      artifactName: 'tfplan-${{ parameters.environment }}'
-                      targetPath: '$(Pipeline.Workspace)/tfplan'
-  
-                  - task: TerraformTaskV4@4
-                    displayName: 'Terraform Init'
-                    inputs:
-                      provider: 'azurerm'
-                      command: 'init'
-                      workingDirectory: '$(workingDirectory)'
-                      backendServiceArm: 'azure-service-connection'
-                      backendAzureRmResourceGroupName: 'rg-terraform-state'
-                      backendAzureRmStorageAccountName: 'stterraformstate'
-                      backendAzureRmContainerName: 'tfstate'
-                      backendAzureRmKey: 'aks-${{ parameters.environment }}.terraform.tfstate'
-  
-                  - task: TerraformTaskV4@4
-                    displayName: 'Terraform Apply'
-                    inputs:
-                      provider: 'azurerm'
-                      command: 'apply'
-                      workingDirectory: '$(workingDirectory)'
-                      environmentServiceNameAzureRM: 'azure-service-connection'
-                      commandOptions: '$(Pipeline.Workspace)/tfplan/tfplan'
+      paths:
+        - 'terraform/**'
+        - '.github/workflows/terraform.yml'
+    workflow_dispatch:
+      inputs:
+        action:
+          description: 'Terraform action to perform'
+          required: true
+          default: 'plan'
+          type: choice
+          options:
+            - plan
+            - apply
+            - destroy
+        environment:
+          description: 'Target environment'
+          required: true
+          default: 'dev'
+          type: choice
+          options:
+            - dev
+            - staging
+            - prod
+
+  permissions:
+    id-token: write
+    contents: read
+    pull-requests: write
+
+  env:
+    TERRAFORM_VERSION: '1.6.0'
+    ARM_USE_OIDC: true
+    ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+    ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+  jobs:
+    validate:
+      name: 'Validate'
+      runs-on: ubuntu-latest
+      defaults:
+        run:
+          working-directory: terraform/environments/${{ github.event.inputs.environment || 'dev' }}
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Setup Terraform
+          uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+        - name: Terraform Format Check
+          run: terraform fmt -check -recursive
+          working-directory: terraform
+
+        - name: Azure Login
+          uses: azure/login@v2
+          with:
+            client-id: ${{ secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+        - name: Terraform Init
+          run: terraform init
+
+        - name: Terraform Validate
+          run: terraform validate -no-color
+
+    plan:
+      name: 'Plan'
+      runs-on: ubuntu-latest
+      needs: validate
+      defaults:
+        run:
+          working-directory: terraform/environments/${{ github.event.inputs.environment || 'dev' }}
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Setup Terraform
+          uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+        - name: Azure Login
+          uses: azure/login@v2
+          with:
+            client-id: ${{ secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+        - name: Terraform Init
+          run: terraform init
+
+        - name: Terraform Plan
+          run: terraform plan -detailed-exitcode -no-color -out=tfplan
+
+        - name: Upload Terraform Plan
+          uses: actions/upload-artifact@v4
+          with:
+            name: tfplan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
+            path: terraform/environments/${{ github.event.inputs.environment || 'dev' }}/tfplan
+            retention-days: 5
+
+    apply:
+      name: 'Apply'
+      runs-on: ubuntu-latest
+      needs: plan
+      if: |
+        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+      defaults:
+        run:
+          working-directory: terraform/environments/${{ github.event.inputs.environment || 'dev' }}
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Setup Terraform
+          uses: hashicorp/setup-terraform@v3
+          with:
+            terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+        - name: Azure Login
+          uses: azure/login@v2
+          with:
+            client-id: ${{ secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+        - name: Terraform Init
+          run: terraform init
+
+        - name: Download Terraform Plan
+          uses: actions/download-artifact@v4
+          with:
+            name: tfplan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
+            path: terraform/environments/${{ github.event.inputs.environment || 'dev' }}
+
+        - name: Terraform Apply
+          run: terraform apply -auto-approve tfplan
   ```
-- [ ] Configure Azure DevOps service connection (Azure Resource Manager)
-- [ ] Create variable groups per environment (terraform-dev, terraform-staging, terraform-prod)
-- [ ] Set up ADO environments with approval gates for staging/production
-- [ ] Configure branch policies for main branch
+- [ ] Configure OIDC federation with Azure AD for passwordless authentication
+- [ ] Create repository secrets (AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID)
+- [ ] Set up GitHub Environments with protection rules for staging/production
+- [ ] Configure branch protection rules for main branch
 
 #### 5.5 Validation and Testing
 - [ ] Run `terraform fmt -check` in CI
