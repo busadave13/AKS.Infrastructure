@@ -158,18 +158,19 @@ resource "azurerm_kubernetes_cluster" "main" {
 # Workload Node Pool (Spot Instances)
 #--------------------------------------------------------------
 resource "azurerm_kubernetes_cluster_node_pool" "workload" {
-  name                  = "workload"
-  kubernetes_cluster_id = azurerm_kubernetes_cluster.main.id
-  vm_size               = var.workload_node_vm_size
-  mode                  = "User"
-  os_type               = "Linux"
-  os_sku                = "Ubuntu"
-  os_disk_type          = "Managed"
-  os_disk_size_gb       = 30
-  max_pods              = 30
-  zones                 = ["1", "2", "3"]
-  vnet_subnet_id        = var.aks_subnet_id
-  tags                  = var.tags
+  name                        = "workload"
+  kubernetes_cluster_id       = azurerm_kubernetes_cluster.main.id
+  vm_size                     = var.workload_node_vm_size
+  mode                        = "User"
+  os_type                     = "Linux"
+  os_sku                      = "Ubuntu"
+  os_disk_type                = "Managed"
+  os_disk_size_gb             = 30
+  max_pods                    = 30
+  zones                       = ["1", "2", "3"]
+  vnet_subnet_id              = var.aks_subnet_id
+  temporary_name_for_rotation = "workloadtmp"
+  tags                        = var.tags
 
   # Autoscaling
   auto_scaling_enabled = true
