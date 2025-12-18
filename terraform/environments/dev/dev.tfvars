@@ -55,7 +55,7 @@ system_node_vm_size   = "Standard_B2ms"
 workload_node_count     = 2
 workload_node_min_count = 1
 workload_node_max_count = 4
-workload_node_vm_size   = "Standard_D2s_v5"
+workload_node_vm_size   = "Standard_D2ads_v5"
 workload_node_spot      = true
 
 #--------------------------------------------------------------
