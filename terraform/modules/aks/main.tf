@@ -184,8 +184,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
   spot_max_price  = var.workload_node_spot ? -1 : null
 
   node_labels = {
-    "nodepool"                              = "workload"
-    "kubernetes.azure.com/scalesetpriority" = var.workload_node_spot ? "spot" : "regular"
+    "nodepool" = "workload"
   }
 
   node_taints = var.workload_node_spot ? [
