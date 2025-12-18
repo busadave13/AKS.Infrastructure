@@ -6,22 +6,22 @@
 - **Version**: 1.6.0+
 - **Backend**: Azure Storage Account (azurerm)
 - **Provider**: AzureRM (latest stable)
-- **State File**: `aks-platform-dev.terraform.tfstate`
+- **State File**: `aks-dev.terraform.tfstate`
 
 ### Azure Resources (Development Environment)
 
 | Resource | Name Pattern | SKU/Tier |
 |----------|--------------|----------|
-| Resource Group | `rg-aks-platform-dev-wus3` | N/A |
-| Virtual Network | `vnet-platform-dev-wus3` | 10.0.0.0/16 |
-| AKS Cluster | `aks-microservices-dev-wus3` | Free tier |
+| Resource Group | `rg-aks-dev-wus2` | N/A |
+| Virtual Network | `vnet-aks-dev-wus2` | 10.0.0.0/16 |
+| AKS Cluster | `aks-dev-wus2` | Free tier |
 | System Node Pool | `system` | Standard_B2ms (2 nodes) |
-| Workload Node Pool | `workload` | Standard_B2ms Spot (2 nodes) |
-| Container Registry | `acrplatformdevwus3` | Basic |
-| Key Vault | `kv-platform-dev-wus3` | Standard |
-| Log Analytics | `log-platform-dev-wus3` | Pay-as-you-go |
-| Monitor Workspace | `amw-platform-dev-wus3` | Pay-as-you-go |
-| Managed Grafana | `grafana-platform-dev-wus3` | Essential |
+| Workload Node Pool | `workload` | Standard_B2ms (2 nodes) |
+| Container Registry | `acraksdevwus2` | Basic |
+| Key Vault | `kv-aks-dev-wus2` | Standard |
+| Log Analytics | `log-aks-dev-wus2` | Pay-as-you-go |
+| Monitor Workspace | `amw-aks-dev-wus2` | Pay-as-you-go |
+| Managed Grafana | `grafana-aks-dev-wus2` | Essential |
 
 ### Network Configuration
 | Subnet | CIDR | Purpose |

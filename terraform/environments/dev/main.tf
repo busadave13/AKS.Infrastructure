@@ -1,5 +1,5 @@
 # Development Environment - Main Configuration
-# AKS Platform Infrastructure
+# AKS Infrastructure
 
 #--------------------------------------------------------------
 # Provider Configuration
@@ -53,7 +53,7 @@ module "networking" {
   pe_subnet_prefix = var.pe_subnet_prefix
 
   # NSG
-  nsg_name = "nsg-platform-${var.environment}-${var.location_short}"
+  nsg_name = "nsg-aks-${var.environment}-${var.location_short}"
 
   tags = var.tags
 }
@@ -69,15 +69,15 @@ module "monitoring" {
   environment         = var.environment
 
   # Log Analytics
-  log_analytics_name = "log-platform-${var.environment}-${var.location_short}"
+  log_analytics_name = "log-aks-${var.environment}-${var.location_short}"
   log_retention_days = var.log_retention_days
 
   # Azure Monitor (Prometheus)
-  monitor_workspace_name = "amw-platform-${var.environment}-${var.location_short}"
+  monitor_workspace_name = "amw-aks-${var.environment}-${var.location_short}"
 
-  # Grafana (name max 23 chars: grafana-plat-dev-wus3 = 21 chars)
+  # Grafana (name max 23 chars: grafana-aks-dev-wus2 = 20 chars)
   enable_grafana           = var.enable_grafana
-  grafana_name             = "grafana-plat-${var.environment}-${var.location_short}"
+  grafana_name             = "grafana-aks-${var.environment}-${var.location_short}"
   grafana_admin_object_ids = var.grafana_admin_object_ids
 
   # Alerting
@@ -98,8 +98,8 @@ module "aks" {
   location            = module.networking.resource_group_location
 
   # Cluster Configuration
-  cluster_name       = "aks-platform-${var.environment}-${var.location_short}"
-  dns_prefix         = "aks-platform-${var.environment}"
+  cluster_name       = "aks-${var.environment}-${var.location_short}"
+  dns_prefix         = "aks-${var.environment}"
   kubernetes_version = var.kubernetes_version
   aks_subnet_id      = module.networking.aks_subnet_id
 
@@ -162,7 +162,7 @@ module "keyvault" {
   resource_group_name = module.networking.resource_group_name
   location            = module.networking.resource_group_location
 
-  keyvault_name = "kv-platform-${var.environment}-${var.location_short}"
+  keyvault_name = "kv-aks-${var.environment}-${var.location_short}"
 
   # Workload Identity Access (enabled after AKS is created)
   enable_workload_identity_access = true

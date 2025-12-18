@@ -16,7 +16,7 @@ module "keyvault" {
   resource_group_name = module.networking.resource_group_name
   location            = module.networking.resource_group_location
   
-  keyvault_name = "kv-platform-dev-wus3"
+  keyvault_name = "kv-aks-dev-wus2"
   
   # Workload identity access
   workload_identity_principal_id = module.aks.workload_identity_principal_id
@@ -26,13 +26,13 @@ module "keyvault" {
   
   # Private endpoint (optional)
   enable_private_endpoint      = false
-  private_endpoint_name        = "pep-kv-dev-wus3"
+  private_endpoint_name        = "pep-kv-dev-wus2"
   private_endpoint_subnet_id   = module.networking.pe_subnet_id
   keyvault_private_dns_zone_id = module.networking.keyvault_private_dns_zone_id
   
   tags = {
     Environment = "dev"
-    Owner       = "platform-team"
+    Owner       = "dev-team"
     ManagedBy   = "terraform"
   }
 }

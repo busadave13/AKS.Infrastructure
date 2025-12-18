@@ -1,6 +1,6 @@
 # Networking Module
 
-This module creates the networking infrastructure for the AKS platform including:
+This module creates the networking infrastructure for the AKS cluster including:
 
 - Resource Group
 - Virtual Network
@@ -14,23 +14,23 @@ This module creates the networking infrastructure for the AKS platform including
 module "networking" {
   source = "../../modules/networking"
 
-  resource_group_name = "rg-aks-platform-dev-wus3"
-  location            = "westus3"
+  resource_group_name = "rg-aks-dev-wus2"
+  location            = "westus2"
   
-  vnet_name          = "vnet-platform-dev-wus3"
+  vnet_name          = "vnet-aks-dev-wus2"
   vnet_address_space = ["10.0.0.0/16"]
   
-  aks_subnet_name   = "snet-aks-nodes-dev-wus3"
+  aks_subnet_name   = "snet-aks-dev-wus2"
   aks_subnet_prefix = "10.0.0.0/22"
   
-  pe_subnet_name   = "snet-privateendpoints-dev-wus3"
+  pe_subnet_name   = "snet-pe-dev-wus2"
   pe_subnet_prefix = "10.0.4.0/24"
   
-  nsg_name = "nsg-aks-dev-wus3"
+  nsg_name = "nsg-aks-dev-wus2"
   
   tags = {
     Environment = "dev"
-    Owner       = "platform-team"
+    Owner       = "dev-team"
     ManagedBy   = "terraform"
   }
 }

@@ -17,7 +17,7 @@ module "acr" {
   resource_group_name = module.networking.resource_group_name
   location            = module.networking.resource_group_location
   
-  acr_name = "acrplatformdevwus3"
+  acr_name = "acraksdevwus2"
   sku      = "Basic"
   
   # AKS integration
@@ -25,13 +25,13 @@ module "acr" {
   
   # Private endpoint (optional)
   enable_private_endpoint    = false
-  private_endpoint_name      = "pep-acr-dev-wus3"
+  private_endpoint_name      = "pep-acr-dev-wus2"
   private_endpoint_subnet_id = module.networking.pe_subnet_id
   acr_private_dns_zone_id    = module.networking.acr_private_dns_zone_id
   
   tags = {
     Environment = "dev"
-    Owner       = "platform-team"
+    Owner       = "dev-team"
     ManagedBy   = "terraform"
   }
 }

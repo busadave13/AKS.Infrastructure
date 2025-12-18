@@ -18,15 +18,15 @@ module "monitoring" {
   environment         = "dev"
   
   # Log Analytics
-  log_analytics_name = "log-platform-dev-wus3"
+  log_analytics_name = "log-aks-dev-wus2"
   log_retention_days = 30
   
   # Azure Monitor (Prometheus)
-  monitor_workspace_name = "amw-platform-dev-wus3"
+  monitor_workspace_name = "amw-aks-dev-wus2"
   
   # Grafana
   enable_grafana           = true
-  grafana_name             = "grafana-platform-dev-wus3"
+  grafana_name             = "grafana-aks-dev-wus2"
   grafana_admin_object_ids = ["<user-or-group-object-id>"]
   
   # Alerting (optional)
@@ -36,7 +36,7 @@ module "monitoring" {
   
   tags = {
     Environment = "dev"
-    Owner       = "platform-team"
+    Owner       = "dev-team"
     ManagedBy   = "terraform"
   }
 }

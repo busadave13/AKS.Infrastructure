@@ -1,26 +1,26 @@
 # Development Environment - Variable Values
-# AKS Platform Infrastructure
+# AKS Infrastructure
 
 #--------------------------------------------------------------
 # General
 #--------------------------------------------------------------
-resource_group_name = "rg-aks-platform-dev-wus2"
+resource_group_name = "rg-aks-dev-wus2"
 location            = "westus2"
 location_short      = "wus2"
 environment         = "dev"
 
 tags = {
   Environment = "dev"
-  Owner       = "platform-team"
+  Owner       = "dev-team"
   CostCenter  = "IT-1234"
-  Application = "aks-platform"
+  Application = "aks-microservices"
   ManagedBy   = "terraform"
 }
 
 #--------------------------------------------------------------
 # Networking
 #--------------------------------------------------------------
-vnet_name          = "vnet-platform-dev-wus2"
+vnet_name          = "vnet-aks-dev-wus2"
 vnet_address_space = ["10.0.0.0/16"]
 aks_subnet_prefix  = "10.0.0.0/22"
 pe_subnet_prefix   = "10.0.4.0/24"
@@ -61,7 +61,7 @@ workload_node_spot      = false
 #--------------------------------------------------------------
 # ACR
 #--------------------------------------------------------------
-acr_name = "acrplatformdevwus2"
+acr_name = "acraksdevwus2"
 acr_sku  = "Basic"
 
 #--------------------------------------------------------------

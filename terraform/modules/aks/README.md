@@ -20,16 +20,16 @@ module "aks" {
   resource_group_name = module.networking.resource_group_name
   location            = module.networking.resource_group_location
   
-  cluster_name       = "aks-microservices-dev-wus3"
-  dns_prefix         = "aks-microservices-dev"
-  kubernetes_version = "1.30"
+  cluster_name       = "aks-dev-wus2"
+  dns_prefix         = "aks-dev"
+  kubernetes_version = "1.32"
   
   aks_subnet_id              = module.networking.aks_subnet_id
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   
   # Identities
-  kubelet_identity_name  = "id-aks-kubelet-dev-wus3"
-  workload_identity_name = "id-aks-workload-dev-wus3"
+  kubelet_identity_name  = "id-aks-kubelet-dev-wus2"
+  workload_identity_name = "id-aks-workload-dev-wus2"
   
   # System node pool
   system_node_count     = 2
@@ -42,11 +42,11 @@ module "aks" {
   workload_node_min_count = 1
   workload_node_max_count = 4
   workload_node_vm_size   = "Standard_B2ms"
-  workload_node_spot      = true
+  workload_node_spot      = false
   
   tags = {
     Environment = "dev"
-    Owner       = "platform-team"
+    Owner       = "dev-team"
     ManagedBy   = "terraform"
   }
 }

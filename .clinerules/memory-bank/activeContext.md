@@ -3,10 +3,11 @@
 ## Current State
 - **Project Phase**: Infrastructure Development
 - **Environment**: Development (dev)
-- **Region**: East US 2 (eastus2)
+- **Region**: West US 2 (westus2)
 - **CI/CD**: GitHub Actions (migrated from Azure DevOps)
 
 ## Recent Changes
+- Removed 'platform' from naming convention (e.g., `rg-aks-dev-wus2` instead of `rg-aks-platform-dev-wus2`)
 - Migrated CI/CD from Azure DevOps Pipelines to GitHub Actions
 - Created `.github/workflows/terraform.yml` with OIDC authentication
 - Removed `pipelines/azure-pipelines-terraform.yml`
