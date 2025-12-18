@@ -164,7 +164,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
   mode                  = "User"
   os_type               = "Linux"
   os_sku                = "Ubuntu"
-  os_disk_type          = "Ephemeral"
+  os_disk_type          = "Managed"
   os_disk_size_gb       = 30
   max_pods              = 30
   zones                 = ["1", "2", "3"]
