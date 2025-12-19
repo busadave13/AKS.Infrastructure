@@ -1,0 +1,301 @@
+name: 'Terraform Drift Detection'
+
+# Detects infrastructure drift by comparing Terraform state with actual Azure resources
+# Creates a GitHub issue if drift is detected
+
+on:
+  schedule:
+    # Run every Sunday at 8:00 AM UTC (midnight PST)
+    - cron: '0 8 * * 0'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  TERRAFORM_VERSION: '1.7.0'
+  ARM_USE_OIDC: true
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+# Prevent concurrent drift detection runs
+concurrency:
+  group: terraform-drift-${{ github.event.inputs.environment || 'dev' }}
+  cancel-in-progress: false
+
+jobs:
+  drift-detection:
+    name: 'Detect Drift'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform/environments/dev
+    outputs:
+      drift_detected: ${{ steps.plan.outputs.drift_detected }}
+      resources_to_add: ${{ steps.parse.outputs.resources_to_add }}
+      resources_to_change: ${{ steps.parse.outputs.resources_to_change }}
+      resources_to_destroy: ${{ steps.parse.outputs.resources_to_destroy }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -var-file=dev.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          EXIT_CODE=$?
+          set -e
+          
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          # Exit code 0 = No changes, 1 = Error, 2 = Changes detected
+          if [ $EXIT_CODE -eq 2 ]; then
+            echo "drift_detected=true" >> $GITHUB_OUTPUT
+            echo "🔄 Drift detected - infrastructure changes found"
+          elif [ $EXIT_CODE -eq 0 ]; then
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            echo "✅ No drift detected - infrastructure is in sync"
+          else
+            echo "drift_detected=false" >> $GITHUB_OUTPUT
+            echo "❌ Terraform plan failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+      - name: Parse Plan Output
+        id: parse
+        if: steps.plan.outputs.drift_detected == 'true'
+        run: |
+          # Extract resource counts from plan output
+          PLAN_OUTPUT=$(cat plan_output.txt)
+          
+          # Parse the plan summary line: "Plan: X to add, Y to change, Z to destroy."
+          ADD=$(echo "$PLAN_OUTPUT" | grep -oP '\d+(?= to add)' | tail -1 || echo "0")
+          CHANGE=$(echo "$PLAN_OUTPUT" | grep -oP '\d+(?= to change)' | tail -1 || echo "0")
+          DESTROY=$(echo "$PLAN_OUTPUT" | grep -oP '\d+(?= to destroy)' | tail -1 || echo "0")
+          
+          # Default to 0 if not found
+          ADD=${ADD:-0}
+          CHANGE=${CHANGE:-0}
+          DESTROY=${DESTROY:-0}
+          
+          echo "resources_to_add=$ADD" >> $GITHUB_OUTPUT
+          echo "resources_to_change=$CHANGE" >> $GITHUB_OUTPUT
+          echo "resources_to_destroy=$DESTROY" >> $GITHUB_OUTPUT
+          
+          echo "📊 Plan Summary: $ADD to add, $CHANGE to change, $DESTROY to destroy"
+
+      - name: Upload Plan Output
+        if: steps.plan.outputs.drift_detected == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-plan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
+          path: |
+            terraform/environments/dev/tfplan
+            terraform/environments/dev/plan_output.txt
+          retention-days: 30
+
+      - name: Generate Summary
+        run: |
+          echo "## 🔍 Drift Detection Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.plan.outputs.drift_detected }}" == "true" ]; then
+            echo "### ⚠️ Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Change Type | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Resources to add | ${{ steps.parse.outputs.resources_to_add }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Resources to change | ${{ steps.parse.outputs.resources_to_change }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Resources to destroy | ${{ steps.parse.outputs.resources_to_destroy }} |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ No Drift Detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Infrastructure is in sync with Terraform configuration." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  create-issue:
+    name: 'Create Issue'
+    runs-on: ubuntu-latest
+    needs: drift-detection
+    if: needs.drift-detection.outputs.drift_detected == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Plan Output
+        uses: actions/download-artifact@v4
+        with:
+          name: drift-plan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
+          path: ./plan-output
+
+      - name: Check for Existing Open Drift Issue
+        id: check_issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'drift-detected,infrastructure'
+            });
+            
+            const env = '${{ github.event.inputs.environment || 'dev' }}';
+            const existingIssue = issues.find(issue => 
+              issue.title.includes('Terraform Drift Detected') &&
+              issue.title.includes(env)
+            );
+            
+            if (existingIssue) {
+              console.log(`Found existing drift issue #${existingIssue.number}`);
+              core.setOutput('exists', 'true');
+              core.setOutput('number', existingIssue.number);
+            } else {
+              console.log('No existing drift issue found');
+              core.setOutput('exists', 'false');
+              core.setOutput('number', '0');
+            }
+
+      - name: Create or Update Drift Issue
+        uses: actions/github-script@v7
+        env:
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+          RESOURCES_ADD: ${{ needs.drift-detection.outputs.resources_to_add }}
+          RESOURCES_CHANGE: ${{ needs.drift-detection.outputs.resources_to_change }}
+          RESOURCES_DESTROY: ${{ needs.drift-detection.outputs.resources_to_destroy }}
+          ISSUE_EXISTS: ${{ steps.check_issue.outputs.exists }}
+          ISSUE_NUMBER: ${{ steps.check_issue.outputs.number }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            
+            // Read plan output
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync('./plan-output/plan_output.txt', 'utf8');
+            } catch (e) {
+              planOutput = 'Unable to read plan output';
+            }
+            
+            // Truncate if too long
+            const maxLength = 60000;
+            const truncatedPlan = planOutput.length > maxLength
+              ? planOutput.substring(0, maxLength) + '\n\n... (truncated, see workflow artifacts for full output)'
+              : planOutput;
+            
+            const environment = process.env.ENVIRONMENT;
+            const timestamp = new Date().toISOString();
+            const workflowUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            
+            const resourcesAdd = process.env.RESOURCES_ADD || '0';
+            const resourcesChange = process.env.RESOURCES_CHANGE || '0';
+            const resourcesDestroy = process.env.RESOURCES_DESTROY || '0';
+            
+            const issueBody = `## 🔄 Terraform Drift Detected
+
+            **Environment:** \`${environment}\`
+            **Detected:** ${timestamp}
+            **Workflow Run:** [View Details](${workflowUrl})
+
+            ### 📊 Summary
+
+            | Change Type | Count |
+            |-------------|-------|
+            | ➕ Resources to add | ${resourcesAdd} |
+            | 🔄 Resources to change | ${resourcesChange} |
+            | ➖ Resources to destroy | ${resourcesDestroy} |
+
+            ### 📋 Terraform Plan Output
+
+            <details>
+            <summary>Click to expand plan output</summary>
+
+            \`\`\`hcl
+            ${truncatedPlan}
+            \`\`\`
+
+            </details>
+
+            ### 🔧 Next Steps
+
+            1. **Review** the changes above to understand what has drifted
+            2. **Investigate** the root cause:
+               - Was this an intentional manual change?
+               - Was this caused by Azure auto-updates or defaults?
+               - Is this a configuration that should be added to Terraform?
+            3. **Remediate** the drift:
+               - If the change should be kept: Update Terraform configuration to match
+               - If the change should be reverted: Run \`terraform apply\` via the Terraform workflow
+
+            ---
+            *This issue was automatically created by the Drift Detection workflow.*
+            *Last updated: ${timestamp}*`;
+
+            const issueExists = process.env.ISSUE_EXISTS === 'true';
+            const issueNumber = parseInt(process.env.ISSUE_NUMBER, 10);
+            
+            if (issueExists && issueNumber > 0) {
+              // Update existing issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: issueBody
+              });
+              
+              // Add a comment about the update
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: `🔄 **Drift detection ran again**\n\nUpdated at: ${timestamp}\nWorkflow run: [View Details](${workflowUrl})\n\nSummary: ${resourcesAdd} to add, ${resourcesChange} to change, ${resourcesDestroy} to destroy`
+              });
+              
+              console.log(`Updated existing issue #${issueNumber}`);
+            } else {
+              // Create new issue
+              const { data: newIssue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🔄 Terraform Drift Detected - ${environment} environment`,
+                body: issueBody,
+                labels: ['drift-detected', 'infrastructure', environment]
+              });
+              
+              console.log(`Created new issue #${newIssue.number}`);
+            }
