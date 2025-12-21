@@ -83,7 +83,7 @@
 ## Important File Locations
 | File | Purpose |
 |------|---------|
-| `.docs/architecture-design.md` | Complete architecture documentation |
+| `docs/architecture-design.md` | Complete architecture documentation |
 | `terraform/environments/dev/main.tf` | Root module for dev environment |
 | `terraform/environments/dev/variables.tf` | Variable definitions |
 | `terraform/environments/dev/backend.tf` | State backend config |

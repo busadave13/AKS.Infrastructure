@@ -40,7 +40,7 @@ Small development team (1-2 developers) working on containerized applications in
 ```
 AKS.Infrastructure/
 ├── .clinerules/           # Cline rules and memory bank
-├── .docs/                 # Architecture documentation
+├── docs/                  # Architecture documentation
 ├── .github/
 │   └── workflows/         # GitHub Actions workflows
 │       └── terraform.yml  # Terraform CI/CD pipeline
