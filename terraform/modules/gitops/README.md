@@ -9,6 +9,8 @@ This module configures GitOps with Flux v2 for AKS including:
 
 ## Usage
 
+### Public Repository (No Authentication Required)
+
 ```hcl
 module "gitops" {
   source = "../../modules/gitops"
@@ -16,9 +18,40 @@ module "gitops" {
   aks_cluster_id = module.aks.cluster_id
   environment    = "dev"
   
-  # Git repository (separate from infrastructure repo)
+  # Git repository (public - no authentication needed)
+  gitops_repo_url = "https://github.com/org/AKS.GitOps.git"
+  gitops_branch   = "main"
+  public_repo     = true  # No PAT required for public repos
+  
+  # Sync settings
+  sync_interval_seconds  = 60
+  retry_interval_seconds = 60
+  
+  # Configuration toggles
+  enable_infrastructure_config = true
+  enable_apps_config           = true
+  enable_helm_releases_config  = false
+  
+  # Controller settings
+  enable_helm_controller         = true
+  enable_notification_controller = true
+  enable_image_automation        = false
+}
+```
+
+### Private Repository (Authentication Required)
+
+```hcl
+module "gitops" {
+  source = "../../modules/gitops"
+
+  aks_cluster_id = module.aks.cluster_id
+  environment    = "dev"
+  
+  # Git repository (private - requires authentication)
   gitops_repo_url = "https://github.com/org/AKS.GitOps"
   gitops_branch   = "main"
+  public_repo     = false  # Default - requires PAT
   git_https_user  = "git"
   git_https_pat   = var.gitops_pat
   
@@ -46,8 +79,9 @@ module "gitops" {
 | environment | Environment name | string | - | yes |
 | gitops_repo_url | URL of the GitOps repository | string | - | yes |
 | gitops_branch | Branch to sync from | string | "main" | no |
-| git_https_user | HTTPS username for Git | string | "git" | no |
-| git_https_pat | Personal Access Token | string | - | yes |
+| public_repo | Whether the repository is public (no auth required) | bool | false | no |
+| git_https_user | HTTPS username for Git (not required for public repos) | string | "git" | no |
+| git_https_pat | Personal Access Token (not required for public repos) | string | "" | no |
 | sync_interval_seconds | Sync interval | number | 60 | no |
 | retry_interval_seconds | Retry interval | number | 60 | no |
 | enable_infrastructure_config | Enable infrastructure config | bool | true | no |
@@ -121,8 +155,9 @@ AKS.GitOps/                          # Separate repository
 
 ## Security
 
-- PAT is base64 encoded before transmission
-- Consider storing PAT in Azure Key Vault
+- **Public repositories**: No authentication required; set `public_repo = true`
+- **Private repositories**: PAT is base64 encoded before transmission
+- Consider storing PAT in Azure Key Vault for private repos
 - Use minimal permissions for Git access
 - Enable branch protection on GitOps repo
 

@@ -41,8 +41,8 @@ resource "azurerm_kubernetes_flux_configuration" "infrastructure" {
     url                      = var.gitops_repo_url
     reference_type           = "branch"
     reference_value          = var.gitops_branch
-    https_user               = var.git_https_user
-    https_key_base64         = base64encode(var.git_https_pat)
+    https_user               = var.public_repo ? null : var.git_https_user
+    https_key_base64         = var.public_repo ? null : base64encode(var.git_https_pat)
     sync_interval_in_seconds = var.sync_interval_seconds
     timeout_in_seconds       = 600
   }
@@ -73,8 +73,8 @@ resource "azurerm_kubernetes_flux_configuration" "apps" {
     url                      = var.gitops_repo_url
     reference_type           = "branch"
     reference_value          = var.gitops_branch
-    https_user               = var.git_https_user
-    https_key_base64         = base64encode(var.git_https_pat)
+    https_user               = var.public_repo ? null : var.git_https_user
+    https_key_base64         = var.public_repo ? null : base64encode(var.git_https_pat)
     sync_interval_in_seconds = var.sync_interval_seconds
     timeout_in_seconds       = 600
   }
@@ -108,8 +108,8 @@ resource "azurerm_kubernetes_flux_configuration" "helm_releases" {
     url                      = var.gitops_repo_url
     reference_type           = "branch"
     reference_value          = var.gitops_branch
-    https_user               = var.git_https_user
-    https_key_base64         = base64encode(var.git_https_pat)
+    https_user               = var.public_repo ? null : var.git_https_user
+    https_key_base64         = var.public_repo ? null : base64encode(var.git_https_pat)
     sync_interval_in_seconds = 300
     timeout_in_seconds       = 600
   }

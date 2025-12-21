@@ -65,11 +65,12 @@ acr_name = "acraksdevwus2"
 acr_sku  = "Basic"
 
 #--------------------------------------------------------------
-# GitOps (Disabled by default)
+# GitOps
 #--------------------------------------------------------------
-enable_gitops          = false
-gitops_repo_url        = ""
+enable_gitops          = true
+gitops_repo_url        = "https://github.com/busadave13/K8.Infra.GitOps.git"
 gitops_branch          = "main"
+public_repo            = true
 git_https_user         = "git"
 sync_interval_seconds  = 60
 retry_interval_seconds = 60

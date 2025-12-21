@@ -194,6 +194,7 @@ module "gitops" {
   # Git Repository
   gitops_repo_url = var.gitops_repo_url
   gitops_branch   = var.gitops_branch
+  public_repo     = var.public_repo
   git_https_user  = var.git_https_user
   git_https_pat   = var.gitops_pat
 

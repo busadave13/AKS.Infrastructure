@@ -45,16 +45,23 @@ variable "gitops_branch" {
   default     = "main"
 }
 
+variable "public_repo" {
+  description = "Whether the GitOps repository is public (no authentication required)"
+  type        = bool
+  default     = false
+}
+
 variable "git_https_user" {
-  description = "HTTPS username for Git authentication"
+  description = "HTTPS username for Git authentication (not required for public repos)"
   type        = string
   default     = "git"
 }
 
 variable "git_https_pat" {
-  description = "Personal Access Token for Git authentication"
+  description = "Personal Access Token for Git authentication (not required for public repos)"
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 #--------------------------------------------------------------
