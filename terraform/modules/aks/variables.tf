@@ -44,8 +44,13 @@ variable "kubernetes_version" {
   default     = "1.30"
 }
 
-variable "aks_subnet_id" {
-  description = "ID of the subnet for AKS nodes"
+variable "system_subnet_id" {
+  description = "ID of the subnet for system node pool"
+  type        = string
+}
+
+variable "workload_subnet_id" {
+  description = "ID of the subnet for workload node pool"
   type        = string
 }
 
@@ -55,8 +60,8 @@ variable "admin_group_object_ids" {
   default     = []
 }
 
-variable "log_analytics_workspace_id" {
-  description = "ID of the Log Analytics workspace for Container Insights"
+variable "egress_public_ip_id" {
+  description = "ID of the public IP for load balancer egress"
   type        = string
 }
 

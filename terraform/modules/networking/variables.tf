@@ -26,27 +26,49 @@ variable "vnet_address_space" {
   type        = list(string)
 }
 
-variable "aks_subnet_name" {
-  description = "Name of the AKS nodes subnet"
+#--------------------------------------------------------------
+# System Subnet
+#--------------------------------------------------------------
+variable "system_subnet_prefix" {
+  description = "CIDR prefix for the system node pool subnet"
   type        = string
 }
 
-variable "aks_subnet_prefix" {
-  description = "CIDR prefix for the AKS nodes subnet"
+variable "system_nsg_name" {
+  description = "Name of the NSG for the system subnet"
   type        = string
 }
 
-variable "pe_subnet_name" {
-  description = "Name of the private endpoints subnet"
+#--------------------------------------------------------------
+# Workload Subnet
+#--------------------------------------------------------------
+variable "workload_subnet_prefix" {
+  description = "CIDR prefix for the workload node pool subnet"
   type        = string
 }
 
-variable "pe_subnet_prefix" {
+variable "workload_nsg_name" {
+  description = "Name of the NSG for the workload subnet"
+  type        = string
+}
+
+#--------------------------------------------------------------
+# Private Subnet
+#--------------------------------------------------------------
+variable "private_subnet_prefix" {
   description = "CIDR prefix for the private endpoints subnet"
   type        = string
 }
 
-variable "nsg_name" {
-  description = "Name of the network security group"
+variable "private_nsg_name" {
+  description = "Name of the NSG for the private subnet"
+  type        = string
+}
+
+#--------------------------------------------------------------
+# Public IP for Egress
+#--------------------------------------------------------------
+variable "egress_public_ip_name" {
+  description = "Name of the public IP for load balancer egress"
   type        = string
 }

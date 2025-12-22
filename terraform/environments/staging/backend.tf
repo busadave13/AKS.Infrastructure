@@ -1,4 +1,4 @@
-# Development Environment - Backend Configuration
+# Staging Environment - Backend Configuration
 # 
 # To use remote state with Azure Storage, uncomment the backend block below
 # and create the storage account first with:
@@ -13,7 +13,7 @@ terraform {
     resource_group_name  = "rg-terraform-state"
     storage_account_name = "stterraformstatewus3"
     container_name       = "tfstate"
-    key                  = "aks-dev.terraform.tfstate"
+    key                  = "aks-staging.terraform.tfstate"
   }
 }
 

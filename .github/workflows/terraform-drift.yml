@@ -12,10 +12,10 @@ on:
       environment:
         description: 'Target environment'
         required: true
-        default: 'dev'
+        default: 'staging'
         type: choice
         options:
-          - dev
+          - staging
 
 permissions:
   id-token: write
@@ -31,7 +31,7 @@ env:
 
 # Prevent concurrent drift detection runs
 concurrency:
-  group: terraform-drift-${{ github.event.inputs.environment || 'dev' }}
+  group: terraform-drift-${{ github.event.inputs.environment || 'staging' }}
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/environments/dev
+        working-directory: terraform/environments/staging
     outputs:
       drift_detected: ${{ steps.plan.outputs.drift_detected }}
       resources_to_add: ${{ steps.parse.outputs.resources_to_add }}
@@ -71,7 +71,7 @@ jobs:
         id: plan
         run: |
           set +e
-          terraform plan -var-file=dev.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          terraform plan -var-file=staging.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
           EXIT_CODE=${PIPESTATUS[0]}
           
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
@@ -117,17 +117,17 @@ jobs:
         if: steps.plan.outputs.drift_detected == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: drift-plan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
+          name: drift-plan-${{ github.event.inputs.environment || 'staging' }}-${{ github.run_id }}
           path: |
-            terraform/environments/dev/tfplan
-            terraform/environments/dev/plan_output.txt
+            terraform/environments/staging/tfplan
+            terraform/environments/staging/plan_output.txt
           retention-days: 30
 
       - name: Generate Summary
         run: |
           echo "## 🔍 Drift Detection Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Environment:** ${{ github.event.inputs.environment || 'dev' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment || 'staging' }}" >> $GITHUB_STEP_SUMMARY
           echo "**Timestamp:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
@@ -158,7 +158,7 @@ jobs:
       - name: Download Plan Output
         uses: actions/download-artifact@v4
         with:
-          name: drift-plan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
+          name: drift-plan-${{ github.event.inputs.environment || 'staging' }}-${{ github.run_id }}
           path: ./plan-output
 
       - name: Check for Existing Open Drift Issue
@@ -174,7 +174,7 @@ jobs:
               labels: 'drift-detected,infrastructure'
             });
             
-            const env = '${{ github.event.inputs.environment || 'dev' }}';
+            const env = '${{ github.event.inputs.environment || 'staging' }}';
             const existingIssue = issues.find(issue => 
               issue.title.includes('Terraform Drift Detected') &&
               issue.title.includes(env)
@@ -193,7 +193,7 @@ jobs:
       - name: Create or Update Drift Issue
         uses: actions/github-script@v7
         env:
-          ENVIRONMENT: ${{ github.event.inputs.environment || 'dev' }}
+          ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
           RESOURCES_ADD: ${{ needs.drift-detection.outputs.resources_to_add }}
           RESOURCES_CHANGE: ${{ needs.drift-detection.outputs.resources_to_change }}
           RESOURCES_DESTROY: ${{ needs.drift-detection.outputs.resources_to_destroy }}

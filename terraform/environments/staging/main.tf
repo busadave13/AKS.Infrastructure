@@ -1,4 +1,4 @@
-# Development Environment - Main Configuration
+# Staging Environment - Main Configuration
 # AKS Infrastructure
 
 #--------------------------------------------------------------
@@ -45,15 +45,20 @@ module "networking" {
   vnet_name          = var.vnet_name
   vnet_address_space = var.vnet_address_space
 
-  # Subnet Configuration
-  aks_subnet_name   = "snet-aks-${var.environment}-${var.location_short}"
-  aks_subnet_prefix = var.aks_subnet_prefix
+  # System Subnet Configuration
+  system_subnet_prefix = var.system_subnet_prefix
+  system_nsg_name      = "nsg-system-${var.environment}-${var.location_short}"
 
-  pe_subnet_name   = "snet-pe-${var.environment}-${var.location_short}"
-  pe_subnet_prefix = var.pe_subnet_prefix
+  # Workload Subnet Configuration
+  workload_subnet_prefix = var.workload_subnet_prefix
+  workload_nsg_name      = "nsg-workload-${var.environment}-${var.location_short}"
 
-  # NSG
-  nsg_name = "nsg-aks-${var.environment}-${var.location_short}"
+  # Private Subnet Configuration
+  private_subnet_prefix = var.private_subnet_prefix
+  private_nsg_name      = "nsg-private-${var.environment}-${var.location_short}"
+
+  # Public IP for Egress
+  egress_public_ip_name = "pip-aks-egress-${var.environment}-${var.location_short}"
 
   tags = var.tags
 }
@@ -68,14 +73,10 @@ module "monitoring" {
   location            = module.networking.resource_group_location
   environment         = var.environment
 
-  # Log Analytics
-  log_analytics_name = "log-aks-${var.environment}-${var.location_short}"
-  log_retention_days = var.log_retention_days
-
   # Azure Monitor (Prometheus)
   monitor_workspace_name = "amw-aks-${var.environment}-${var.location_short}"
 
-  # Grafana (name max 23 chars: grafana-aks-dev-wus2 = 20 chars)
+  # Grafana (name max 23 chars: grafana-aks-staging-wus2 = 24 chars, so use shorter format)
   enable_grafana           = var.enable_grafana
   grafana_name             = "grafana-aks-${var.environment}-${var.location_short}"
   grafana_admin_object_ids = var.grafana_admin_object_ids
@@ -102,7 +103,8 @@ module "aks" {
   node_resource_group = "rg-aks-nodepool-${var.environment}-${var.location_short}"
   dns_prefix          = "aks-${var.environment}"
   kubernetes_version  = var.kubernetes_version
-  aks_subnet_id       = module.networking.aks_subnet_id
+  system_subnet_id    = module.networking.system_subnet_id
+  workload_subnet_id  = module.networking.workload_subnet_id
 
   # Identity
   kubelet_identity_name  = "id-aks-kubelet-${var.environment}-${var.location_short}"
@@ -121,8 +123,8 @@ module "aks" {
   workload_node_vm_size   = var.workload_node_vm_size
   workload_node_spot      = var.workload_node_spot
 
-  # Monitoring
-  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  # Egress
+  egress_public_ip_id = module.networking.egress_public_ip_id
 
   # Azure AD Integration
   admin_group_object_ids = var.aks_admin_group_object_ids
@@ -145,7 +147,7 @@ module "acr" {
   # Private Endpoint
   enable_private_endpoint    = var.enable_private_endpoints
   private_endpoint_name      = "pep-acr-${var.environment}-${var.location_short}"
-  private_endpoint_subnet_id = module.networking.pe_subnet_id
+  private_endpoint_subnet_id = module.networking.private_subnet_id
   acr_private_dns_zone_id    = module.networking.acr_private_dns_zone_id
 
   # AKS Integration
@@ -175,7 +177,7 @@ module "keyvault" {
   # Private Endpoint
   enable_private_endpoint      = var.enable_private_endpoints
   private_endpoint_name        = "pep-kv-${var.environment}-${var.location_short}"
-  private_endpoint_subnet_id   = module.networking.pe_subnet_id
+  private_endpoint_subnet_id   = module.networking.private_subnet_id
   keyvault_private_dns_zone_id = module.networking.keyvault_private_dns_zone_id
 
   tags = var.tags

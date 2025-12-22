@@ -65,7 +65,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     max_pods                     = 30
     only_critical_addons_enabled = true
     zones                        = ["1", "2", "3"]
-    vnet_subnet_id               = var.aks_subnet_id
+    vnet_subnet_id               = var.system_subnet_id
 
     node_labels = {
       "nodepool" = "system"
@@ -100,6 +100,11 @@ resource "azurerm_kubernetes_cluster" "main" {
     pod_cidr            = "10.244.0.0/16"
     service_cidr        = "10.245.0.0/16"
     dns_service_ip      = "10.245.0.10"
+
+    # Use static public IP for egress
+    load_balancer_profile {
+      outbound_ip_address_ids = [var.egress_public_ip_id]
+    }
   }
 
   # Azure AD integration with Azure RBAC
@@ -111,12 +116,6 @@ resource "azurerm_kubernetes_cluster" "main" {
   # OIDC and Workload Identity
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
-
-  # Monitoring
-  oms_agent {
-    log_analytics_workspace_id      = var.log_analytics_workspace_id
-    msi_auth_for_monitoring_enabled = true
-  }
 
   # Azure Policy addon
   azure_policy_enabled = true
@@ -169,7 +168,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
   os_disk_size_gb             = 30
   max_pods                    = 30
   zones                       = ["1", "2", "3"]
-  vnet_subnet_id              = var.aks_subnet_id
+  vnet_subnet_id              = var.workload_subnet_id
   temporary_name_for_rotation = "workloadtmp"
   tags                        = var.tags
 

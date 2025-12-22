@@ -1,5 +1,5 @@
 # Networking Module
-# Creates VNet, subnets, NSG, and private DNS zones
+# Creates VNet, subnets, NSGs, and private DNS zones
 
 #--------------------------------------------------------------
 # Resource Group
@@ -25,12 +25,27 @@ resource "azurerm_virtual_network" "main" {
 # Subnets
 #--------------------------------------------------------------
 
-# AKS Nodes Subnet
-resource "azurerm_subnet" "aks_nodes" {
-  name                 = var.aks_subnet_name
+# System Node Pool Subnet
+resource "azurerm_subnet" "system" {
+  name                 = "system-subnet"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.aks_subnet_prefix]
+  address_prefixes     = [var.system_subnet_prefix]
+
+  # Required for Azure CNI Overlay
+  service_endpoints = [
+    "Microsoft.ContainerRegistry",
+    "Microsoft.KeyVault",
+    "Microsoft.Storage"
+  ]
+}
+
+# Workload Node Pool Subnet
+resource "azurerm_subnet" "workload" {
+  name                 = "workload-subnet"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = [var.workload_subnet_prefix]
 
   # Required for Azure CNI Overlay
   service_endpoints = [
@@ -41,21 +56,23 @@ resource "azurerm_subnet" "aks_nodes" {
 }
 
 # Private Endpoints Subnet
-resource "azurerm_subnet" "private_endpoints" {
-  name                 = var.pe_subnet_name
+resource "azurerm_subnet" "private" {
+  name                 = "private-subnet"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.pe_subnet_prefix]
+  address_prefixes     = [var.private_subnet_prefix]
 
   # Disable network policies for private endpoints
   private_endpoint_network_policies = "Disabled"
 }
 
 #--------------------------------------------------------------
-# Network Security Group
+# Network Security Groups
 #--------------------------------------------------------------
-resource "azurerm_network_security_group" "aks" {
-  name                = var.nsg_name
+
+# System Subnet NSG
+resource "azurerm_network_security_group" "system" {
+  name                = var.system_nsg_name
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   tags                = var.tags
@@ -70,7 +87,7 @@ resource "azurerm_network_security_group" "aks" {
     source_port_range          = "*"
     destination_port_range     = "443"
     source_address_prefix      = "Internet"
-    destination_address_prefix = var.aks_subnet_prefix
+    destination_address_prefix = var.system_subnet_prefix
   }
 
   # Allow HTTP inbound
@@ -83,7 +100,7 @@ resource "azurerm_network_security_group" "aks" {
     source_port_range          = "*"
     destination_port_range     = "80"
     source_address_prefix      = "Internet"
-    destination_address_prefix = var.aks_subnet_prefix
+    destination_address_prefix = var.system_subnet_prefix
   }
 
   # Deny all other inbound traffic
@@ -100,10 +117,133 @@ resource "azurerm_network_security_group" "aks" {
   }
 }
 
-# Associate NSG with AKS subnet
-resource "azurerm_subnet_network_security_group_association" "aks" {
-  subnet_id                 = azurerm_subnet.aks_nodes.id
-  network_security_group_id = azurerm_network_security_group.aks.id
+# Workload Subnet NSG
+resource "azurerm_network_security_group" "workload" {
+  name                = var.workload_nsg_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+
+  # Allow HTTPS inbound
+  security_rule {
+    name                       = "AllowHTTPS"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = var.workload_subnet_prefix
+  }
+
+  # Allow HTTP inbound
+  security_rule {
+    name                       = "AllowHTTP"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = var.workload_subnet_prefix
+  }
+
+  # Deny all other inbound traffic
+  security_rule {
+    name                       = "DenyAllInbound"
+    priority                   = 4096
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+# Private Subnet NSG
+resource "azurerm_network_security_group" "private" {
+  name                = var.private_nsg_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = var.tags
+
+  # Allow HTTPS inbound
+  security_rule {
+    name                       = "AllowHTTPS"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "443"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = var.private_subnet_prefix
+  }
+
+  # Allow HTTP inbound
+  security_rule {
+    name                       = "AllowHTTP"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "80"
+    source_address_prefix      = "Internet"
+    destination_address_prefix = var.private_subnet_prefix
+  }
+
+  # Deny all other inbound traffic
+  security_rule {
+    name                       = "DenyAllInbound"
+    priority                   = 4096
+    direction                  = "Inbound"
+    access                     = "Deny"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+#--------------------------------------------------------------
+# NSG Subnet Associations
+#--------------------------------------------------------------
+
+# Associate NSG with System subnet
+resource "azurerm_subnet_network_security_group_association" "system" {
+  subnet_id                 = azurerm_subnet.system.id
+  network_security_group_id = azurerm_network_security_group.system.id
+}
+
+# Associate NSG with Workload subnet
+resource "azurerm_subnet_network_security_group_association" "workload" {
+  subnet_id                 = azurerm_subnet.workload.id
+  network_security_group_id = azurerm_network_security_group.workload.id
+}
+
+# Associate NSG with Private subnet
+resource "azurerm_subnet_network_security_group_association" "private" {
+  subnet_id                 = azurerm_subnet.private.id
+  network_security_group_id = azurerm_network_security_group.private.id
+}
+
+#--------------------------------------------------------------
+# Public IP for Load Balancer Egress
+#--------------------------------------------------------------
+resource "azurerm_public_ip" "egress" {
+  name                = var.egress_public_ip_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  zones               = ["1", "2", "3"]
+  tags                = var.tags
 }
 
 #--------------------------------------------------------------

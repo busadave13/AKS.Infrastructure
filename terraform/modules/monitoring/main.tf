@@ -1,37 +1,5 @@
 # Monitoring Module
-# Creates Log Analytics, Azure Monitor Workspace, and Managed Grafana
-
-#--------------------------------------------------------------
-# Log Analytics Workspace
-#--------------------------------------------------------------
-resource "azurerm_log_analytics_workspace" "main" {
-  name                = var.log_analytics_name
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  sku                 = "PerGB2018"
-  retention_in_days   = var.log_retention_days
-  tags                = var.tags
-
-  # Daily cap (optional, for cost control)
-  daily_quota_gb = var.daily_quota_gb
-}
-
-#--------------------------------------------------------------
-# Log Analytics Solutions (Container Insights)
-#--------------------------------------------------------------
-resource "azurerm_log_analytics_solution" "container_insights" {
-  solution_name         = "ContainerInsights"
-  location              = var.location
-  resource_group_name   = var.resource_group_name
-  workspace_resource_id = azurerm_log_analytics_workspace.main.id
-  workspace_name        = azurerm_log_analytics_workspace.main.name
-  tags                  = var.tags
-
-  plan {
-    publisher = "Microsoft"
-    product   = "OMSGallery/ContainerInsights"
-  }
-}
+# Creates Azure Monitor Workspace (Prometheus) and Managed Grafana
 
 #--------------------------------------------------------------
 # Azure Monitor Workspace (for Managed Prometheus)
@@ -79,15 +47,6 @@ resource "azurerm_role_assignment" "grafana_monitoring_reader" {
 
   scope                = azurerm_monitor_workspace.main.id
   role_definition_name = "Monitoring Reader"
-  principal_id         = azurerm_dashboard_grafana.main[0].identity[0].principal_id
-}
-
-# Grant Grafana access to Log Analytics Workspace
-resource "azurerm_role_assignment" "grafana_log_analytics_reader" {
-  count = var.enable_grafana ? 1 : 0
-
-  scope                = azurerm_log_analytics_workspace.main.id
-  role_definition_name = "Log Analytics Reader"
   principal_id         = azurerm_dashboard_grafana.main[0].identity[0].principal_id
 }
 

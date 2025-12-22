@@ -1,4 +1,4 @@
-# Development Environment - Variables
+# Staging Environment - Variables
 
 #--------------------------------------------------------------
 # General
@@ -42,12 +42,17 @@ variable "vnet_address_space" {
   type        = list(string)
 }
 
-variable "aks_subnet_prefix" {
-  description = "CIDR prefix for the AKS nodes subnet"
+variable "system_subnet_prefix" {
+  description = "CIDR prefix for the system node pool subnet"
   type        = string
 }
 
-variable "pe_subnet_prefix" {
+variable "workload_subnet_prefix" {
+  description = "CIDR prefix for the workload node pool subnet"
+  type        = string
+}
+
+variable "private_subnet_prefix" {
   description = "CIDR prefix for the private endpoints subnet"
   type        = string
 }
@@ -61,12 +66,6 @@ variable "enable_private_endpoints" {
 #--------------------------------------------------------------
 # Monitoring
 #--------------------------------------------------------------
-variable "log_retention_days" {
-  description = "Number of days to retain logs in Log Analytics"
-  type        = number
-  default     = 30
-}
-
 variable "enable_grafana" {
   description = "Enable Azure Managed Grafana"
   type        = bool
