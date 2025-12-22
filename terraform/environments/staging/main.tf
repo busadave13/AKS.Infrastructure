@@ -114,6 +114,7 @@ module "aks" {
 
   # Azure AD Integration
   admin_group_object_ids = var.aks_admin_group_object_ids
+  admin_user_object_ids  = var.aks_admin_user_object_ids
 
   tags = module.common.tags
 }

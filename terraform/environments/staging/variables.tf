@@ -93,6 +93,12 @@ variable "aks_admin_group_object_ids" {
   default     = []
 }
 
+variable "aks_admin_user_object_ids" {
+  description = "List of Azure AD user object IDs for AKS admin access (Azure Kubernetes Service RBAC Cluster Admin role)"
+  type        = list(string)
+  default     = []
+}
+
 # System Node Pool
 variable "system_node_count" {
   description = "Initial number of nodes in the system node pool"

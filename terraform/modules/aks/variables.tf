@@ -60,6 +60,12 @@ variable "admin_group_object_ids" {
   default     = []
 }
 
+variable "admin_user_object_ids" {
+  description = "List of Azure AD user object IDs for cluster admin access (Azure Kubernetes Service RBAC Cluster Admin role)"
+  type        = list(string)
+  default     = []
+}
+
 variable "egress_public_ip_id" {
   description = "ID of the public IP for load balancer egress"
   type        = string

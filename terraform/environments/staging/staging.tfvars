@@ -42,6 +42,9 @@ kubernetes_version = "1.32"
 # Add your Azure AD group object IDs for AKS admin access
 aks_admin_group_object_ids = []
 
+# Add your Azure AD user object IDs for AKS admin access
+aks_admin_user_object_ids = ["197a7ad1-564b-4c89-9934-c50f7da5de68"]
+
 # System Node Pool
 system_node_count     = 2
 system_node_min_count = 2

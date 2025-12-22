@@ -207,6 +207,17 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
 }
 
 #--------------------------------------------------------------
+# Azure RBAC Role Assignments for Cluster Admin Access
+#--------------------------------------------------------------
+resource "azurerm_role_assignment" "cluster_admin_users" {
+  for_each = toset(var.admin_user_object_ids)
+
+  scope                = azurerm_kubernetes_cluster.main.id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = each.value
+}
+
+#--------------------------------------------------------------
 # Federated Identity Credential for Workload Identity
 #--------------------------------------------------------------
 resource "azurerm_federated_identity_credential" "workload" {
