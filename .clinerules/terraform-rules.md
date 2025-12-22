@@ -1,29 +1,26 @@
-# AKS Terraform Infrastructure Rules
+# Terraform Rules
 
-## Role Persona
-
-You are an **AKS System Architect Developer** specializing in implementing AKS infrastructure using Terraform with Azure best practices.
-
----
+## Purpose
+This document outlines the best practices and standards for writing Terraform code. Adhering to these guidelines ensures consistency, maintainability.
 
 ## When to Invoke
 
 Activate this rule when:
-- Creating new Terraform modules for Azure resources
-- Implementing AKS cluster configurations
+- Creating new Terraform modules
+- Implementing new terraform environments
+- Adding resources to existing Terraform configurations
+- Modifying existing Terraform modules or environments
 - Setting up environment configurations (dev, test, staging, prod)
-- Configuring networking, monitoring, or GitOps via Terraform
-- Troubleshooting Terraform state or dependency issues
 
 ---
 
 ## Required Inputs
 
-Before starting any infrastructure task, gather the following from the user:
+Before starting any terraform task, gather the following from the user:
 
 | Input | Description | Example |
 |-------|-------------|---------|
-| **Identifier** | Project or workload name | `platform`, `webapp`, `api` |
+| **Identifier** | Unique identifier acronym | `xpci`, `xbs`, `xpc` |
 | **Environment** | Target environment | `dev`, `test`, `staging`, `prod` |
 | **Region** | Azure region | `eastus2`, `westus2`, `centralus` |
 
@@ -33,24 +30,24 @@ Before starting any infrastructure task, gather the following from the user:
 
 ### Format
 ```
-{resource-type}-{identifier}-{environment}-{region-abbrev}
+{resource-type}-{identifier}-{environment}-{region-abbreviation}
 ```
 
 ### Resource Prefixes
 
 | Resource Type | Prefix | Example |
 |--------------|--------|---------|
-| Resource Group | `rg` | `rg-platform-staging-eus2` |
-| AKS Cluster | `aks` | `aks-platform-prod-eus2` |
-| Container Registry | `cr` | `crplatformprodeus2` (no hyphens) |
-| Key Vault | `kv` | `kv-platform-dev-eus2` |
-| Virtual Network | `vnet` | `vnet-platform-test-eus2` |
+| Resource Group | `rg` | `rg-xbs-staging-eus2` |
+| AKS Cluster | `aks` | `aks-xbs-prod-eus2` |
+| Container Registry | `cr` | `crxbsprodeus2` (no hyphens) |
+| Key Vault | `kv` | `kv-xbs-dev-eus2` |
+| Virtual Network | `vnet` | `vnet-xbs-test-eus2` |
 | Subnet | `snet` | `snet-aks-staging-eus2` |
 | Managed Identity | `id` | `id-kubelet-prod-eus2` |
-| Log Analytics | `log` | `log-platform-dev-eus2` |
+| Log Analytics | `log` | `log-xbs-dev-eus2` |
 | Private Endpoint | `pep` | `pep-acr-staging-eus2` |
-| Monitor Workspace | `amw` | `amw-platform-prod-eus2` |
-| Grafana | `graf` | `graf-platform-staging-eus2` |
+| Monitor Workspace | `amw` | `amw-xbs-prod-eus2` |
+| Grafana | `graf` | `graf-xbs-staging-eus2` |
 
 ### Environment Names (Full)
 | Environment | Use In Names |
@@ -78,12 +75,12 @@ Before starting any infrastructure task, gather the following from the user:
 ```
 terraform/
 ├── environments/
-│   ├── dev/
+│   ├── <environment-name>/
 │   │   ├── main.tf
 │   │   ├── variables.tf
-│   │   ├── dev.tfvars
+│   │   ├── parameters.tfvars
 │   │   ├── outputs.tf
-│   │   └── backend.tf
+│   │   └── provider.tf
 │   ├── test/
 │   ├── staging/
 │   └── prod/
@@ -98,7 +95,14 @@ terraform/
 └── .tflint.hcl
 ```
 
----
+### Module Structure Pattern
+
+```
+modules/<module-name>/
+├── main.tf           # Resource definitions
+├── variables.tf      # Input variables
+├── outputs.tf        # Output values
+```
 
 ## Common Module Usage
 
@@ -115,8 +119,8 @@ module "common" {
 ```
 
 ### Common Module Outputs
-- `naming_prefix` - Computed prefix: `{identifier}-{environment}-{region_abbrev}`
-- `region_abbrev` - Short region code (e.g., `eus2`)
+- `naming_prefix` - Computed prefix: `{identifier}-{environment}-{region_abbreviation}`
+- `region_abbreviation` - Short region code (e.g., `eus2`)
 - `tags` - Standard tags for all resources
 
 ---
@@ -162,16 +166,6 @@ resource "azurerm_federated_identity_credential" "workload" {
 }
 ```
 
-### Module Structure Pattern
-
-```
-modules/<module-name>/
-├── main.tf           # Resource definitions
-├── variables.tf      # Input variables
-├── outputs.tf        # Output values
-└── README.md         # Documentation
-```
-
 ### Variable Definition Pattern
 
 ```hcl
@@ -204,7 +198,7 @@ variable "sku" {
 
 ```bash
 # Initialize
-terraform init
+terraform init -backend=false
 
 # Format
 terraform fmt -recursive
@@ -222,11 +216,10 @@ terraform apply -var-file=<env>.tfvars
 tflint --init && tflint --recursive
 ```
 
----
-
 ## Reference Documentation
+Use `mcp tools` to look up any of the following resources:
 
 - [AzureRM Provider](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs)
-- [AKS Cluster](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_cluster)
+- [Terraform AzureRm Naming](https://github.com/Azure/terraform-azurerm-naming)
 - [Azure CAF Naming](https://learn.microsoft.com/en-us/azure/cloud-adoption-framework/ready/azure-best-practices/resource-naming)
 - [TFLint AzureRM](https://github.com/terraform-linters/tflint-ruleset-azurerm)
