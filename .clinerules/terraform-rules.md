@@ -3,6 +3,76 @@
 ## Purpose
 This document outlines the best practices and standards for writing Terraform code. Adhering to these guidelines ensures consistency, maintainability.
 
+---
+
+## Sensitive Data Protection
+
+**NEVER output or expose sensitive information.** Follow these mandatory rules:
+
+### Output Rules
+- **Always mark sensitive outputs** with `sensitive = true`
+- **Never output** secrets, passwords, connection strings, keys, or tokens
+- **Never output** client secrets, certificates, or private keys
+- **Avoid outputting** full resource IDs that expose subscription/tenant information when not necessary
+
+### Variable Rules
+- **Mark sensitive variables** with `sensitive = true`
+- **Never hardcode** secrets, passwords, or keys in Terraform files
+- **Use Key Vault references** or environment variables for sensitive values
+- **Never commit** `.tfvars` files containing secrets to source control
+
+### Logging and State
+- **Never use `local-exec`** to echo or log sensitive values
+- **Be aware** that sensitive values are stored in Terraform state - secure state files appropriately
+- **Use remote state** with encryption enabled for production environments
+
+### Code Examples
+
+```hcl
+# CORRECT: Sensitive variable
+variable "admin_password" {
+  description = "Administrator password"
+  type        = string
+  sensitive   = true
+}
+
+# CORRECT: Sensitive output
+output "connection_string" {
+  description = "Database connection string"
+  value       = azurerm_cosmosdb_account.main.connection_strings[0]
+  sensitive   = true
+}
+
+# WRONG: Never do this
+output "exposed_secret" {
+  value = var.admin_password  # Missing sensitive = true!
+}
+
+# WRONG: Never hardcode secrets
+resource "azurerm_key_vault_secret" "bad" {
+  name         = "my-secret"
+  value        = "hardcoded-secret-value"  # NEVER do this!
+  key_vault_id = azurerm_key_vault.main.id
+}
+
+# CORRECT: Reference from Key Vault or variable
+resource "azurerm_key_vault_secret" "good" {
+  name         = "my-secret"
+  value        = var.secret_value  # From sensitive variable
+  key_vault_id = azurerm_key_vault.main.id
+}
+```
+
+### Sensitive Resource Attributes
+Always mark these output types as sensitive:
+- `*_connection_string`
+- `*_primary_key` / `*_secondary_key`
+- `*_password` / `*_admin_password`
+- `*_access_key`
+- `*_sas_token`
+- `*_client_secret`
+- `*_certificate` / `*_private_key`
+
 ## When to Invoke
 
 Activate this rule when:
