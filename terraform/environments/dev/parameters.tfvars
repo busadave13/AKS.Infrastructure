@@ -64,7 +64,7 @@ acr_sku = "Basic"
 #--------------------------------------------------------------
 enable_gitops          = true
 gitops_repo_url        = "https://github.com/busadave13/K8.Infra.GitOps.git"
-gitops_branch          = "dev"
+gitops_branch          = "staging"
 public_repo            = true
 git_https_user         = "git"
 sync_interval_seconds  = 60
