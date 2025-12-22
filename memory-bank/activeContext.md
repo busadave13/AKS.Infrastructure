@@ -8,6 +8,7 @@
 - **CI/CD**: GitHub Actions (migrated from Azure DevOps)
 
 ## Recent Changes
+- Fixed Flux Configuration error: Removed invalid cross-configuration kustomization `depends_on` in gitops module (Azure API does not support referencing kustomizations across different Flux configurations)
 - Refactored staging environment to use common module for CAF-compliant naming
 - Added `identifier` variable (xpci) for resource naming
 - Created `provider.tf` to separate provider configuration from main.tf

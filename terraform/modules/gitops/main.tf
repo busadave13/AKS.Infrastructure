@@ -84,7 +84,8 @@ resource "azurerm_kubernetes_flux_configuration" "apps" {
     path                      = "./apps/overlays/${var.environment}"
     sync_interval_in_seconds  = var.sync_interval_seconds
     retry_interval_in_seconds = var.retry_interval_seconds
-    depends_on                = var.enable_infrastructure_config ? ["infrastructure"] : []
+    # Note: Cross-configuration kustomization dependencies are not supported.
+    # Terraform resource-level depends_on ensures infrastructure config is created first.
   }
 
   depends_on = [
