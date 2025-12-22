@@ -30,24 +30,40 @@ Before starting any terraform task, gather the following from the user:
 
 ### Format
 ```
-{resource-type}-{identifier}-{environment}-{region-abbreviation}
+{resource-type}[-{instance}]-{identifier}-{environment}-{region-abbreviation}
 ```
+
+> **Note:** The `{instance}` component is **optional** and only used when multiple instances of the same resource type exist. Omit it for singleton resources.
+
+### Instance Naming Guidelines
+
+When multiple instances of a resource type are needed, use zero-padded numeric identifiers:
+
+- Use two-digit format for most cases: `01`, `02`, `03`
+- Use three-digit format for larger scales: `001`, `002`, `003`
+- Numbers should be incrementable for scalability
+- Avoid role-based names; use numeric identifiers instead
+
+**Examples:**
+- Multiple Key Vaults: `kv-01-xbs-dev-eus2`, `kv-02-xbs-dev-eus2`
+- Multiple VNets: `vnet-01-xbs-prod-eus2`, `vnet-02-xbs-prod-eus2`
+- Multiple Identities: `id-01-xbs-staging-eus2`, `id-02-xbs-staging-eus2`
 
 ### Resource Prefixes
 
-| Resource Type | Prefix | Example |
-|--------------|--------|---------|
-| Resource Group | `rg` | `rg-xbs-staging-eus2` |
-| AKS Cluster | `aks` | `aks-xbs-prod-eus2` |
-| Container Registry | `cr` | `crxbsprodeus2` (no hyphens) |
-| Key Vault | `kv` | `kv-xbs-dev-eus2` |
-| Virtual Network | `vnet` | `vnet-xbs-test-eus2` |
-| Subnet | `snet` | `snet-aks-staging-eus2` |
-| Managed Identity | `id` | `id-kubelet-prod-eus2` |
-| Log Analytics | `log` | `log-xbs-dev-eus2` |
-| Private Endpoint | `pep` | `pep-acr-staging-eus2` |
-| Monitor Workspace | `amw` | `amw-xbs-prod-eus2` |
-| Grafana | `graf` | `graf-xbs-staging-eus2` |
+| Resource Type | Prefix | Single Instance | Multiple Instances |
+|--------------|--------|-----------------|-------------------|
+| Resource Group | `rg` | `rg-xbs-staging-eus2` | `rg-01-xbs-staging-eus2` |
+| AKS Cluster | `aks` | `aks-xbs-prod-eus2` | `aks-01-xbs-prod-eus2` |
+| Container Registry | `cr` | `crxbsprodeus2` | `cr01xbsprodeus2` (no hyphens) |
+| Key Vault | `kv` | `kv-xbs-dev-eus2` | `kv-01-xbs-dev-eus2` |
+| Virtual Network | `vnet` | `vnet-xbs-test-eus2` | `vnet-01-xbs-test-eus2` |
+| Subnet | `snet` | `snet-aks-staging-eus2` | `snet-01-aks-staging-eus2` |
+| Managed Identity | `id` | `id-kubelet-prod-eus2` | `id-01-kubelet-prod-eus2` |
+| Log Analytics | `log` | `log-xbs-dev-eus2` | `log-01-xbs-dev-eus2` |
+| Private Endpoint | `pep` | `pep-acr-staging-eus2` | `pep-01-acr-staging-eus2` |
+| Monitor Workspace | `amw` | `amw-xbs-prod-eus2` | `amw-01-xbs-prod-eus2` |
+| Grafana | `graf` | `graf-xbs-staging-eus2` | `graf-01-xbs-staging-eus2` |
 
 ### Environment Names (Full)
 | Environment | Use In Names |
