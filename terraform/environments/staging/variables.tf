@@ -1,11 +1,16 @@
-# Development Environment - Variables
+# Staging Environment - Variables
 
 #--------------------------------------------------------------
 # General
 #--------------------------------------------------------------
-variable "resource_group_name" {
-  description = "Name of the resource group"
+variable "identifier" {
+  description = "Project or workload identifier used in resource naming"
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+$", var.identifier))
+    error_message = "Identifier must contain only lowercase letters and numbers."
+  }
 }
 
 variable "location" {
@@ -13,18 +18,18 @@ variable "location" {
   type        = string
 }
 
-variable "location_short" {
-  description = "Short name for Azure region (e.g., eastus2)"
-  type        = string
-}
-
 variable "environment" {
   description = "Environment name (dev, staging, prod)"
   type        = string
+
+  validation {
+    condition     = contains(["dev", "test", "staging", "prod"], var.environment)
+    error_message = "Environment must be one of: dev, test, staging, prod."
+  }
 }
 
 variable "tags" {
-  description = "Tags to apply to all resources"
+  description = "Additional tags to apply to all resources"
   type        = map(string)
   default     = {}
 }
@@ -32,22 +37,22 @@ variable "tags" {
 #--------------------------------------------------------------
 # Networking
 #--------------------------------------------------------------
-variable "vnet_name" {
-  description = "Name of the virtual network"
-  type        = string
-}
-
 variable "vnet_address_space" {
   description = "Address space for the virtual network"
   type        = list(string)
 }
 
-variable "aks_subnet_prefix" {
-  description = "CIDR prefix for the AKS nodes subnet"
+variable "system_subnet_prefix" {
+  description = "CIDR prefix for the system node pool subnet"
   type        = string
 }
 
-variable "pe_subnet_prefix" {
+variable "workload_subnet_prefix" {
+  description = "CIDR prefix for the workload node pool subnet"
+  type        = string
+}
+
+variable "private_subnet_prefix" {
   description = "CIDR prefix for the private endpoints subnet"
   type        = string
 }
@@ -61,12 +66,6 @@ variable "enable_private_endpoints" {
 #--------------------------------------------------------------
 # Monitoring
 #--------------------------------------------------------------
-variable "log_retention_days" {
-  description = "Number of days to retain logs in Log Analytics"
-  type        = number
-  default     = 30
-}
-
 variable "enable_grafana" {
   description = "Enable Azure Managed Grafana"
   type        = bool
@@ -153,11 +152,6 @@ variable "workload_node_spot" {
 #--------------------------------------------------------------
 # ACR
 #--------------------------------------------------------------
-variable "acr_name" {
-  description = "Name of the Azure Container Registry (must be globally unique)"
-  type        = string
-}
-
 variable "acr_sku" {
   description = "SKU of the Azure Container Registry"
   type        = string

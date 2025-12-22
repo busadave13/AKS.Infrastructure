@@ -27,10 +27,10 @@ on:
       environment:
         description: 'Target environment'
         required: true
-        default: 'dev'
+        default: 'staging'
         type: choice
         options:
-          - dev
+          - staging
 
 permissions:
   id-token: write
@@ -46,7 +46,7 @@ env:
 
 # Prevent concurrent runs to avoid state conflicts
 concurrency:
-  group: terraform-${{ github.event.inputs.environment || 'dev' }}
+  group: terraform-${{ github.event.inputs.environment || 'staging' }}
   cancel-in-progress: false
 
 jobs:
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/environments/dev
+        working-directory: terraform/environments/staging
 
     steps:
       - name: Checkout
@@ -113,7 +113,7 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action != 'destroy')
     defaults:
       run:
-        working-directory: terraform/environments/dev
+        working-directory: terraform/environments/staging
     outputs:
       plan_exit_code: ${{ steps.plan.outputs.exitcode }}
 
@@ -141,7 +141,7 @@ jobs:
         id: plan
         run: |
           set +e
-          terraform plan -var-file=dev.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          terraform plan -var-file=staging.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
           PLAN_EXIT_CODE=${PIPESTATUS[0]}
           echo "exitcode=$PLAN_EXIT_CODE" >> $GITHUB_OUTPUT
           echo "Plan exit code: $PLAN_EXIT_CODE"
@@ -150,10 +150,10 @@ jobs:
       - name: Upload Terraform Plan
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
+          name: tfplan-${{ github.event.inputs.environment || 'staging' }}-${{ github.run_id }}
           path: |
-            terraform/environments/dev/tfplan
-            terraform/environments/dev/plan_output.txt
+            terraform/environments/staging/tfplan
+            terraform/environments/staging/plan_output.txt
           retention-days: 5
 
       - name: Post Plan to PR
@@ -163,7 +163,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const planOutput = fs.readFileSync('terraform/environments/dev/plan_output.txt', 'utf8');
+            const planOutput = fs.readFileSync('terraform/environments/staging/plan_output.txt', 'utf8');
             const truncatedPlan = planOutput.length > 65000 
               ? planOutput.substring(0, 65000) + '\n... (truncated)'
               : planOutput;
@@ -191,11 +191,11 @@ jobs:
     name: 'Apply'
     runs-on: ubuntu-latest
     needs: plan
-    environment: dev
+    environment: staging
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply' && needs.plan.outputs.plan_exit_code == '2'
     defaults:
       run:
-        working-directory: terraform/environments/dev
+        working-directory: terraform/environments/staging
 
     steps:
       - name: Checkout
@@ -219,8 +219,8 @@ jobs:
       - name: Download Terraform Plan
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ github.event.inputs.environment || 'dev' }}-${{ github.run_id }}
-          path: terraform/environments/dev
+          name: tfplan-${{ github.event.inputs.environment || 'staging' }}-${{ github.run_id }}
+          path: terraform/environments/staging
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
@@ -229,11 +229,11 @@ jobs:
     name: 'Destroy'
     runs-on: ubuntu-latest
     needs: validate
-    environment: dev-destroy
+    environment: staging-destroy
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     defaults:
       run:
-        working-directory: terraform/environments/dev
+        working-directory: terraform/environments/staging
 
     steps:
       - name: Checkout
@@ -255,4 +255,4 @@ jobs:
         run: terraform init
 
       - name: Terraform Destroy
-        run: terraform destroy -var-file=dev.tfvars -auto-approve
+        run: terraform destroy -var-file=staging.tfvars -auto-approve

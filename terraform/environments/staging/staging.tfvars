@@ -1,38 +1,35 @@
-# Development Environment - Variable Values
+# Staging Environment - Variable Values
 # AKS Infrastructure
 
 #--------------------------------------------------------------
 # General
 #--------------------------------------------------------------
-resource_group_name = "rg-aks-dev-wus2"
-location            = "westus2"
-location_short      = "wus2"
-environment         = "dev"
+identifier  = "xpci"
+location    = "westus2"
+environment = "staging"
 
 tags = {
-  Environment = "dev"
-  Owner       = "dev-team"
+  Owner       = "platform-team"
   CostCenter  = "IT-1234"
   Application = "aks-microservices"
-  ManagedBy   = "terraform"
 }
 
 #--------------------------------------------------------------
 # Networking
+# Using 10.1.0.0/16 to avoid conflicts with dev (10.0.0.0/16)
 #--------------------------------------------------------------
-vnet_name          = "vnet-aks-dev-wus2"
-vnet_address_space = ["10.0.0.0/16"]
-aks_subnet_prefix  = "10.0.0.0/22"
-pe_subnet_prefix   = "10.0.4.0/24"
+vnet_address_space     = ["10.1.0.0/16"]
+system_subnet_prefix   = "10.1.0.0/23"
+workload_subnet_prefix = "10.1.2.0/23"
+private_subnet_prefix  = "10.1.4.0/24"
 
-# Disable private endpoints for dev (simplifies access)
+# Disable private endpoints for staging (enable for more production-like setup)
 enable_private_endpoints = false
 
 #--------------------------------------------------------------
 # Monitoring
 #--------------------------------------------------------------
-log_retention_days = 30
-enable_grafana     = true
+enable_grafana = true
 
 # Add your Azure AD object IDs for Grafana admin access
 grafana_admin_object_ids = []
@@ -61,15 +58,14 @@ workload_node_spot      = false
 #--------------------------------------------------------------
 # ACR
 #--------------------------------------------------------------
-acr_name = "acraksdevwus2"
-acr_sku  = "Basic"
+acr_sku = "Basic"
 
 #--------------------------------------------------------------
 # GitOps
 #--------------------------------------------------------------
 enable_gitops          = true
 gitops_repo_url        = "https://github.com/busadave13/K8.Infra.GitOps.git"
-gitops_branch          = "main"
+gitops_branch          = "staging"
 public_repo            = true
 git_https_user         = "git"
 sync_interval_seconds  = 60

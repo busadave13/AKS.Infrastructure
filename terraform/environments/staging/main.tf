@@ -1,31 +1,5 @@
-# Development Environment - Main Configuration
+# Staging Environment - Main Configuration
 # AKS Infrastructure
-
-#--------------------------------------------------------------
-# Provider Configuration
-#--------------------------------------------------------------
-terraform {
-  required_version = ">= 1.6.0"
-
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "4.52.0"
-    }
-  }
-}
-
-provider "azurerm" {
-  features {
-    key_vault {
-      purge_soft_delete_on_destroy    = false
-      recover_soft_deleted_key_vaults = true
-    }
-    resource_group {
-      prevent_deletion_if_contains_resources = false
-    }
-  }
-}
 
 #--------------------------------------------------------------
 # Data Sources
@@ -33,29 +7,46 @@ provider "azurerm" {
 data "azurerm_client_config" "current" {}
 
 #--------------------------------------------------------------
+# Common Module
+#--------------------------------------------------------------
+module "common" {
+  source = "../../modules/common"
+
+  identifier      = var.identifier
+  environment     = var.environment
+  location        = var.location
+  additional_tags = var.tags
+}
+
+#--------------------------------------------------------------
 # Networking Module
 #--------------------------------------------------------------
 module "networking" {
   source = "../../modules/networking"
 
-  resource_group_name = var.resource_group_name
-  location            = var.location
+  resource_group_name = "rg-${module.common.naming_prefix}"
+  location            = module.common.location
 
   # VNet Configuration
-  vnet_name          = var.vnet_name
+  vnet_name          = "vnet-${module.common.naming_prefix}"
   vnet_address_space = var.vnet_address_space
 
-  # Subnet Configuration
-  aks_subnet_name   = "snet-aks-${var.environment}-${var.location_short}"
-  aks_subnet_prefix = var.aks_subnet_prefix
+  # System Subnet Configuration
+  system_subnet_prefix = var.system_subnet_prefix
+  system_nsg_name      = "nsg-system-${module.common.naming_prefix}"
 
-  pe_subnet_name   = "snet-pe-${var.environment}-${var.location_short}"
-  pe_subnet_prefix = var.pe_subnet_prefix
+  # Workload Subnet Configuration
+  workload_subnet_prefix = var.workload_subnet_prefix
+  workload_nsg_name      = "nsg-workload-${module.common.naming_prefix}"
 
-  # NSG
-  nsg_name = "nsg-aks-${var.environment}-${var.location_short}"
+  # Private Subnet Configuration
+  private_subnet_prefix = var.private_subnet_prefix
+  private_nsg_name      = "nsg-private-${module.common.naming_prefix}"
 
-  tags = var.tags
+  # Public IP for Egress
+  egress_public_ip_name = "pip-egress-${module.common.naming_prefix}"
+
+  tags = module.common.tags
 }
 
 #--------------------------------------------------------------
@@ -66,18 +57,14 @@ module "monitoring" {
 
   resource_group_name = module.networking.resource_group_name
   location            = module.networking.resource_group_location
-  environment         = var.environment
-
-  # Log Analytics
-  log_analytics_name = "log-aks-${var.environment}-${var.location_short}"
-  log_retention_days = var.log_retention_days
+  environment         = module.common.environment
 
   # Azure Monitor (Prometheus)
-  monitor_workspace_name = "amw-aks-${var.environment}-${var.location_short}"
+  monitor_workspace_name = "amw-${module.common.naming_prefix}"
 
-  # Grafana (name max 23 chars: grafana-aks-dev-wus2 = 20 chars)
+  # Grafana
   enable_grafana           = var.enable_grafana
-  grafana_name             = "grafana-aks-${var.environment}-${var.location_short}"
+  grafana_name             = "graf-${module.common.naming_prefix}"
   grafana_admin_object_ids = var.grafana_admin_object_ids
 
   # Alerting
@@ -85,7 +72,7 @@ module "monitoring" {
   aks_cluster_name         = ""
   alert_action_group_id    = ""
 
-  tags = var.tags
+  tags = module.common.tags
 }
 
 #--------------------------------------------------------------
@@ -98,15 +85,16 @@ module "aks" {
   location            = module.networking.resource_group_location
 
   # Cluster Configuration
-  cluster_name        = "aks-${var.environment}-${var.location_short}"
-  node_resource_group = "rg-aks-nodepool-${var.environment}-${var.location_short}"
-  dns_prefix          = "aks-${var.environment}"
+  cluster_name        = "aks-${module.common.naming_prefix}"
+  node_resource_group = "rg-aks-nodes-${module.common.naming_prefix}"
+  dns_prefix          = "aks-${module.common.identifier}-${module.common.environment}"
   kubernetes_version  = var.kubernetes_version
-  aks_subnet_id       = module.networking.aks_subnet_id
+  system_subnet_id    = module.networking.system_subnet_id
+  workload_subnet_id  = module.networking.workload_subnet_id
 
   # Identity
-  kubelet_identity_name  = "id-aks-kubelet-${var.environment}-${var.location_short}"
-  workload_identity_name = "id-aks-workload-${var.environment}-${var.location_short}"
+  kubelet_identity_name  = "id-kubelet-${module.common.naming_prefix}"
+  workload_identity_name = "id-workload-${module.common.naming_prefix}"
 
   # System Node Pool
   system_node_count     = var.system_node_count
@@ -121,13 +109,13 @@ module "aks" {
   workload_node_vm_size   = var.workload_node_vm_size
   workload_node_spot      = var.workload_node_spot
 
-  # Monitoring
-  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  # Egress
+  egress_public_ip_id = module.networking.egress_public_ip_id
 
   # Azure AD Integration
   admin_group_object_ids = var.aks_admin_group_object_ids
 
-  tags = var.tags
+  tags = module.common.tags
 }
 
 #--------------------------------------------------------------
@@ -139,19 +127,19 @@ module "acr" {
   resource_group_name = module.networking.resource_group_name
   location            = module.networking.resource_group_location
 
-  acr_name = var.acr_name
+  acr_name = "cr${module.common.identifier}${module.common.environment}${module.common.region_abbreviation}"
   sku      = var.acr_sku
 
   # Private Endpoint
   enable_private_endpoint    = var.enable_private_endpoints
-  private_endpoint_name      = "pep-acr-${var.environment}-${var.location_short}"
-  private_endpoint_subnet_id = module.networking.pe_subnet_id
+  private_endpoint_name      = "pep-acr-${module.common.naming_prefix}"
+  private_endpoint_subnet_id = module.networking.private_subnet_id
   acr_private_dns_zone_id    = module.networking.acr_private_dns_zone_id
 
   # AKS Integration
   kubelet_identity_principal_id = module.aks.kubelet_identity_principal_id
 
-  tags = var.tags
+  tags = module.common.tags
 }
 
 #--------------------------------------------------------------
@@ -163,7 +151,7 @@ module "keyvault" {
   resource_group_name = module.networking.resource_group_name
   location            = module.networking.resource_group_location
 
-  keyvault_name = "kv-aks-${var.environment}-${var.location_short}"
+  keyvault_name = "kv-${module.common.naming_prefix}"
 
   # Workload Identity Access (enabled after AKS is created)
   enable_workload_identity_access = true
@@ -174,11 +162,11 @@ module "keyvault" {
 
   # Private Endpoint
   enable_private_endpoint      = var.enable_private_endpoints
-  private_endpoint_name        = "pep-kv-${var.environment}-${var.location_short}"
-  private_endpoint_subnet_id   = module.networking.pe_subnet_id
+  private_endpoint_name        = "pep-kv-${module.common.naming_prefix}"
+  private_endpoint_subnet_id   = module.networking.private_subnet_id
   keyvault_private_dns_zone_id = module.networking.keyvault_private_dns_zone_id
 
-  tags = var.tags
+  tags = module.common.tags
 }
 
 #--------------------------------------------------------------
@@ -189,7 +177,7 @@ module "gitops" {
   count  = var.enable_gitops ? 1 : 0
 
   aks_cluster_id = module.aks.cluster_id
-  environment    = var.environment
+  environment    = module.common.environment
 
   # Git Repository
   gitops_repo_url = var.gitops_repo_url

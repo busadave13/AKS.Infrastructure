@@ -1,4 +1,4 @@
-# Development Environment - Outputs
+# Staging Environment - Outputs
 
 #--------------------------------------------------------------
 # Resource Group
@@ -26,14 +26,24 @@ output "vnet_name" {
   value       = module.networking.vnet_name
 }
 
-output "aks_subnet_id" {
-  description = "ID of the AKS subnet"
-  value       = module.networking.aks_subnet_id
+output "system_subnet_id" {
+  description = "ID of the system node pool subnet"
+  value       = module.networking.system_subnet_id
 }
 
-output "pe_subnet_id" {
+output "workload_subnet_id" {
+  description = "ID of the workload node pool subnet"
+  value       = module.networking.workload_subnet_id
+}
+
+output "private_subnet_id" {
   description = "ID of the private endpoints subnet"
-  value       = module.networking.pe_subnet_id
+  value       = module.networking.private_subnet_id
+}
+
+output "egress_public_ip_address" {
+  description = "Public IP address used for AKS egress traffic"
+  value       = module.networking.egress_public_ip_address
 }
 
 #--------------------------------------------------------------
@@ -108,11 +118,6 @@ output "keyvault_uri" {
 #--------------------------------------------------------------
 # Monitoring
 #--------------------------------------------------------------
-output "log_analytics_workspace_id" {
-  description = "ID of the Log Analytics workspace"
-  value       = module.monitoring.log_analytics_workspace_id
-}
-
 output "monitor_workspace_id" {
   description = "ID of the Azure Monitor workspace"
   value       = module.monitoring.monitor_workspace_id

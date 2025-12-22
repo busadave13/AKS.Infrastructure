@@ -19,25 +19,26 @@ This repository implements a complete AKS platform with:
 .
 ├── .github/
 │   └── workflows/
-│       └── terraform.yml           # GitHub Actions workflow
+│       ├── terraform.yml           # Main CI/CD workflow
+│       └── terraform-drift.yml     # Drift detection workflow
 ├── terraform/
 │   ├── environments/
-│   │   └── dev/                    # Development environment
+│   │   └── staging/                # Staging environment
 │   │       ├── main.tf             # Module composition
 │   │       ├── variables.tf        # Variable definitions
-│   │       ├── terraform.tfvars    # Variable values
+│   │       ├── staging.tfvars      # Variable values
 │   │       ├── outputs.tf          # Output definitions
-│   │       └── backend.tf          # State backend config
+│   │       ├── backend.tf          # State backend config
+│   │       └── provider.tf         # Provider configuration
 │   ├── modules/
+│   │   ├── common/                 # Tags, naming, region mappings
 │   │   ├── networking/             # VNet, subnets, NSG, DNS
 │   │   ├── aks/                    # AKS cluster and node pools
 │   │   ├── acr/                    # Container registry
 │   │   ├── keyvault/               # Key Vault
 │   │   ├── monitoring/             # Log Analytics, Prometheus, Grafana
 │   │   └── gitops/                 # Flux extension and configuration
-│   └── shared/
-│       ├── versions.tf             # Provider versions
-│       └── providers.tf            # Provider configurations
+│   └── .tflint.hcl                 # TFLint configuration
 └── README.md
 ```
 
@@ -51,26 +52,52 @@ This repository implements a complete AKS platform with:
 - kubectl
 - GitHub repository with Actions enabled
 
+## Naming Convention
+
+This project follows Azure CAF (Cloud Adoption Framework) naming conventions:
+
+```
+{resource-type}[-{instance}]-{identifier}-{environment}-{region-abbreviation}
+```
+
+| Component | Description | Example |
+|-----------|-------------|---------|
+| resource-type | Azure resource prefix | `rg`, `aks`, `kv`, `vnet` |
+| instance | Optional numeric ID for multiple instances | `01`, `02` |
+| identifier | Project/workload identifier | `xpci`, `xbs` |
+| environment | Environment name | `dev`, `staging`, `prod` |
+| region-abbreviation | Short region code | `eus2`, `wus2` |
+
+**Examples:**
+- Resource Group: `rg-xpci-staging-wus2`
+- AKS Cluster: `aks-xpci-staging-wus2`
+- Key Vault: `kv-xpci-staging-wus2`
+- Container Registry: `crxpcistagingwus2` (no hyphens)
+
 ## Quick Start
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/busadave13/AKS.Infrastructure.git
-cd AKS.Infrastructure
+git clone https://github.com/busadave13/AKS.Infra.git
+cd AKS.Infra
 ```
 
 ### 2. Configure Variables
 
-Edit `terraform/environments/dev/terraform.tfvars`:
+Edit `terraform/environments/staging/staging.tfvars`:
 
 ```hcl
-# Update these values for your environment
-resource_group_name = "rg-aks-platform-dev-eastus2"
-location            = "eastus2"
+# Required: Project identifier for resource naming
+identifier  = "xpci"
+location    = "westus2"
+environment = "staging"
 
-# IMPORTANT: Change ACR name to be globally unique
-acr_name = "acrplatformdeveastus2unique"
+tags = {
+  Owner       = "platform-team"
+  CostCenter  = "IT-1234"
+  Application = "aks-microservices"
+}
 
 # Add your Azure AD object IDs
 aks_admin_group_object_ids = ["your-azure-ad-group-id"]
@@ -81,25 +108,25 @@ grafana_admin_object_ids   = ["your-azure-ad-user-id"]
 
 ```bash
 # Navigate to environment directory
-cd terraform/environments/dev
+cd terraform/environments/staging
 
 # Initialize Terraform
 terraform init
 
 # Review the plan
-terraform plan
+terraform plan -var-file=staging.tfvars
 
 # Apply the configuration
-terraform apply
+terraform apply -var-file=staging.tfvars
 ```
 
 ### 4. Connect to the Cluster
 
 ```bash
-# Get credentials
+# Get credentials (using CAF naming)
 az aks get-credentials \
-  --resource-group rg-aks-platform-dev-eastus2 \
-  --name aks-platform-dev-eastus2
+  --resource-group rg-xpci-staging-wus2 \
+  --name aks-xpci-staging-wus2
 
 # Verify connection
 kubectl get nodes
@@ -109,11 +136,11 @@ kubectl get nodes
 
 After the initial deployment, enable GitOps:
 
-1. Update `terraform.tfvars`:
+1. Update `staging.tfvars`:
 ```hcl
 enable_gitops   = true
 gitops_repo_url = "https://github.com/your-org/gitops-config"
-gitops_branch   = "main"
+gitops_branch   = "staging"
 ```
 
 2. Set the Git PAT:
@@ -128,14 +155,24 @@ terraform apply
 
 ## Module Reference
 
+### Common Module
+Provides standardized naming, tags, and region mappings.
+
+| Output | Description |
+|--------|-------------|
+| `naming_prefix` | Computed prefix: `{identifier}-{environment}-{region_abbreviation}` |
+| `region_abbreviation` | Short region code (e.g., `wus2`) |
+| `tags` | Standard tags for all resources |
+
 ### Networking Module
 Creates VNet, subnets, NSG, and private DNS zones.
 
 | Output | Description |
 |--------|-------------|
 | `vnet_id` | Virtual Network ID |
-| `aks_subnet_id` | AKS nodes subnet ID |
-| `pe_subnet_id` | Private endpoints subnet ID |
+| `system_subnet_id` | System node pool subnet ID |
+| `workload_subnet_id` | Workload node pool subnet ID |
+| `private_subnet_id` | Private endpoints subnet ID |
 
 ### AKS Module
 Deploys AKS cluster with system and workload node pools.
@@ -147,12 +184,14 @@ Deploys AKS cluster with system and workload node pools.
 | `oidc_issuer_url` | OIDC issuer for workload identity |
 
 ### Monitoring Module
-Sets up Log Analytics, Azure Managed Prometheus, and Grafana.
+Sets up Azure Monitor Workspace (Prometheus) and Managed Grafana.
 
 | Output | Description |
 |--------|-------------|
-| `log_analytics_workspace_id` | Log Analytics workspace ID |
+| `monitor_workspace_id` | Azure Monitor workspace ID |
+| `monitor_workspace_name` | Azure Monitor workspace name |
 | `grafana_endpoint` | Grafana dashboard URL |
+| `grafana_id` | Grafana resource ID |
 
 ## CI/CD with GitHub Actions
 
@@ -229,9 +268,16 @@ az storage container create -n tfstate --account-name stterraformstate
 
 | Event | Behavior |
 |-------|----------|
-| Push to `main` | Validate → Plan → Apply |
+| Push to `main` | Validate → Plan |
 | Pull Request to `main` | Validate → Plan (with PR comment) |
 | Manual (`workflow_dispatch`) | Select action: plan, apply, or destroy |
+
+### Drift Detection
+
+The `terraform-drift.yml` workflow runs weekly to detect infrastructure drift:
+- Scheduled: Every Sunday at 8:00 AM UTC
+- Creates GitHub issues when drift is detected
+- Updates existing issues if drift persists
 
 ### Manual Workflow Execution
 
@@ -245,13 +291,16 @@ winget install GitHub.cli
 gh auth login
 
 # Trigger plan
-gh workflow run terraform.yml -f action=plan -f environment=dev
+gh workflow run terraform.yml -f action=plan -f environment=staging
 
 # Trigger apply
-gh workflow run terraform.yml -f action=apply -f environment=dev
+gh workflow run terraform.yml -f action=apply -f environment=staging
 
 # Trigger destroy (use with caution!)
-gh workflow run terraform.yml -f action=destroy -f environment=dev
+gh workflow run terraform.yml -f action=destroy -f environment=staging
+
+# Trigger drift detection
+gh workflow run terraform-drift.yml -f environment=staging
 
 # View workflow runs
 gh run list --workflow=terraform.yml

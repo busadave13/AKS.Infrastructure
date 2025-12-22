@@ -22,30 +22,10 @@ variable "environment" {
 }
 
 #--------------------------------------------------------------
-# Log Analytics
-#--------------------------------------------------------------
-variable "log_analytics_name" {
-  description = "Name of the Log Analytics workspace"
-  type        = string
-}
-
-variable "log_retention_days" {
-  description = "Number of days to retain logs"
-  type        = number
-  default     = 30
-}
-
-variable "daily_quota_gb" {
-  description = "Daily ingestion quota in GB (-1 for no limit)"
-  type        = number
-  default     = -1
-}
-
-#--------------------------------------------------------------
 # Azure Monitor Workspace (Prometheus)
 #--------------------------------------------------------------
 variable "monitor_workspace_name" {
-  description = "Name of the Azure Monitor workspace"
+  description = "Name of the Azure Monitor workspace for Prometheus"
   type        = string
 }
 
@@ -61,7 +41,6 @@ variable "enable_grafana" {
 variable "grafana_name" {
   description = "Name of the Azure Managed Grafana instance"
   type        = string
-  default     = ""
 }
 
 variable "grafana_admin_object_ids" {
@@ -71,7 +50,7 @@ variable "grafana_admin_object_ids" {
 }
 
 #--------------------------------------------------------------
-# Prometheus Alerting
+# Prometheus Alerts
 #--------------------------------------------------------------
 variable "enable_prometheus_alerts" {
   description = "Enable Prometheus alerting rules"
@@ -80,13 +59,13 @@ variable "enable_prometheus_alerts" {
 }
 
 variable "aks_cluster_name" {
-  description = "Name of the AKS cluster (for alert rule group)"
+  description = "Name of the AKS cluster for Prometheus rules"
   type        = string
   default     = ""
 }
 
 variable "alert_action_group_id" {
-  description = "ID of the action group for alert notifications"
+  description = "ID of the Action Group for alert notifications"
   type        = string
-  default     = ""
+  default     = null
 }
