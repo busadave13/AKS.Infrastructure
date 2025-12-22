@@ -99,3 +99,30 @@ variable "enable_helm_releases_config" {
   type        = bool
   default     = false
 }
+
+#--------------------------------------------------------------
+# Kustomization Paths
+#--------------------------------------------------------------
+variable "infrastructure_path" {
+  description = "Path to infrastructure kustomization in the repo (environment will be appended)"
+  type        = string
+  default     = "./infrastructure"
+}
+
+variable "apps_path" {
+  description = "Path to apps kustomization in the repo (environment will be appended)"
+  type        = string
+  default     = "./apps"
+}
+
+variable "helm_sources_path" {
+  description = "Path to Helm sources kustomization in the repo"
+  type        = string
+  default     = "./helm-releases/base/sources"
+}
+
+variable "helm_releases_path" {
+  description = "Path to Helm releases kustomization in the repo (environment will be appended)"
+  type        = string
+  default     = "./helm-releases"
+}

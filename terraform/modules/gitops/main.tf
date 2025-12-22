@@ -49,7 +49,7 @@ resource "azurerm_kubernetes_flux_configuration" "infrastructure" {
 
   kustomizations {
     name                      = "infrastructure"
-    path                      = "./infrastructure/overlays/${var.environment}"
+    path                      = "${var.infrastructure_path}/${var.environment}"
     sync_interval_in_seconds  = var.sync_interval_seconds * 2
     retry_interval_in_seconds = var.retry_interval_seconds
     recreating_enabled        = false
@@ -81,7 +81,7 @@ resource "azurerm_kubernetes_flux_configuration" "apps" {
 
   kustomizations {
     name                      = "apps"
-    path                      = "./apps/overlays/${var.environment}"
+    path                      = "${var.apps_path}/${var.environment}"
     sync_interval_in_seconds  = var.sync_interval_seconds
     retry_interval_in_seconds = var.retry_interval_seconds
     # Note: Cross-configuration kustomization dependencies are not supported.
@@ -117,14 +117,14 @@ resource "azurerm_kubernetes_flux_configuration" "helm_releases" {
 
   kustomizations {
     name                      = "helm-sources"
-    path                      = "./helm-releases/base/sources"
+    path                      = var.helm_sources_path
     sync_interval_in_seconds  = 300
     retry_interval_in_seconds = 120
   }
 
   kustomizations {
     name                      = "helm-releases"
-    path                      = "./helm-releases/overlays/${var.environment}"
+    path                      = "${var.helm_releases_path}/${var.environment}"
     sync_interval_in_seconds  = 300
     retry_interval_in_seconds = 120
     depends_on                = ["helm-sources"]
