@@ -71,6 +71,12 @@ variable "egress_public_ip_id" {
   type        = string
 }
 
+variable "ingress_resource_group_id" {
+  description = "ID of the resource group containing the ingress public IP. AKS will be granted Network Contributor on this resource group to manage load balancer frontend configurations."
+  type        = string
+  default     = null
+}
+
 #--------------------------------------------------------------
 # Identity
 #--------------------------------------------------------------

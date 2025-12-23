@@ -8,6 +8,10 @@
 - **CI/CD**: GitHub Actions (migrated from Azure DevOps)
 
 ## Recent Changes
+- Added Network Contributor role assignment for AKS control plane identity:
+  - Added `ingress_resource_group_id` variable to AKS module
+  - Control plane identity now has Network Contributor role on the main resource group
+  - This allows AKS to configure load balancer frontend with the ingress public IP
 - Added static ingress public IP with DNS support:
   - Created `pip-ingress-*` public IP in networking module with DNS label
   - Staging uses DNS label `davhar` → `davhar.eastus2.cloudapp.azure.com`

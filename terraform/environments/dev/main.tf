@@ -115,6 +115,9 @@ module "aks" {
   # Egress
   egress_public_ip_id = module.networking.egress_public_ip_id
 
+  # Ingress - grant Network Contributor on resource group for load balancer management
+  ingress_resource_group_id = module.networking.resource_group_id
+
   # Azure AD Integration
   admin_group_object_ids = var.aks_admin_group_object_ids
   admin_user_object_ids  = var.aks_admin_user_object_ids
