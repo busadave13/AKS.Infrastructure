@@ -41,9 +41,17 @@ resource "azurerm_role_assignment" "control_plane_mi_operator" {
 resource "azurerm_role_assignment" "control_plane_network_contributor" {
   count = var.ingress_resource_group_id != null ? 1 : 0
 
-  scope                = var.ingress_resource_group_id
-  role_definition_name = "Network Contributor"
-  principal_id         = azurerm_user_assigned_identity.control_plane.principal_id
+  scope                            = var.ingress_resource_group_id
+  role_definition_name             = "Network Contributor"
+  principal_id                     = azurerm_user_assigned_identity.control_plane.principal_id
+  skip_service_principal_aad_check = true
+
+  lifecycle {
+    ignore_changes = [
+      # Prevent replacement if already exists
+      name,
+    ]
+  }
 }
 
 #--------------------------------------------------------------
