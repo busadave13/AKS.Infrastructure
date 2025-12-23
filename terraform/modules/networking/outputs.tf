@@ -32,39 +32,21 @@ output "vnet_name" {
 }
 
 #--------------------------------------------------------------
-# System Subnet
+# Cluster Subnet (unified subnet for all AKS node pools)
 #--------------------------------------------------------------
-output "system_subnet_id" {
-  description = "ID of the system node pool subnet"
-  value       = azurerm_subnet.system.id
+output "cluster_subnet_id" {
+  description = "ID of the unified AKS cluster subnet"
+  value       = azurerm_subnet.cluster.id
 }
 
-output "system_subnet_name" {
-  description = "Name of the system node pool subnet"
-  value       = azurerm_subnet.system.name
+output "cluster_subnet_name" {
+  description = "Name of the unified AKS cluster subnet"
+  value       = azurerm_subnet.cluster.name
 }
 
-output "system_nsg_id" {
-  description = "ID of the system subnet NSG"
-  value       = azurerm_network_security_group.system.id
-}
-
-#--------------------------------------------------------------
-# Workload Subnet
-#--------------------------------------------------------------
-output "workload_subnet_id" {
-  description = "ID of the workload node pool subnet"
-  value       = azurerm_subnet.workload.id
-}
-
-output "workload_subnet_name" {
-  description = "Name of the workload node pool subnet"
-  value       = azurerm_subnet.workload.name
-}
-
-output "workload_nsg_id" {
-  description = "ID of the workload subnet NSG"
-  value       = azurerm_network_security_group.workload.id
+output "cluster_nsg_id" {
+  description = "ID of the cluster subnet NSG"
+  value       = azurerm_network_security_group.cluster.id
 }
 
 #--------------------------------------------------------------

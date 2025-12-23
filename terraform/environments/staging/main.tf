@@ -31,13 +31,9 @@ module "networking" {
   vnet_name          = "vnet-${module.common.naming_prefix}"
   vnet_address_space = var.vnet_address_space
 
-  # System Subnet Configuration
-  system_subnet_prefix = var.system_subnet_prefix
-  system_nsg_name      = "nsg-system-${module.common.naming_prefix}"
-
-  # Workload Subnet Configuration
-  workload_subnet_prefix = var.workload_subnet_prefix
-  workload_nsg_name      = "nsg-workload-${module.common.naming_prefix}"
+  # Cluster Subnet Configuration (unified subnet for all AKS node pools)
+  cluster_subnet_prefix = var.cluster_subnet_prefix
+  cluster_nsg_name      = "nsg-cluster-${module.common.naming_prefix}"
 
   # Private Subnet Configuration
   private_subnet_prefix = var.private_subnet_prefix
@@ -96,8 +92,7 @@ module "aks" {
   node_resource_group = "rg-aks-nodes-${module.common.naming_prefix}"
   dns_prefix          = "aks-${module.common.identifier}-${module.common.environment}"
   kubernetes_version  = var.kubernetes_version
-  system_subnet_id    = module.networking.system_subnet_id
-  workload_subnet_id  = module.networking.workload_subnet_id
+  cluster_subnet_id   = module.networking.cluster_subnet_id
 
   # Identity
   kubelet_identity_name  = "id-kubelet-${module.common.naming_prefix}"
@@ -110,14 +105,13 @@ module "aks" {
   system_node_max_pods     = var.system_node_max_pods
   system_node_os_disk_type = var.system_node_os_disk_type
 
-  # Workload Node Pool
-  enable_workload_node_pool  = var.enable_workload_node_pool
-  workload_node_count        = var.workload_node_count
-  workload_node_vm_size      = var.workload_node_vm_size
-  workload_node_zones        = var.workload_node_zones
-  workload_node_spot         = var.workload_node_spot
-  workload_node_max_pods     = var.workload_node_max_pods
-  workload_node_os_disk_type = var.workload_node_os_disk_type
+  # Compute Node Pool
+  compute_node_count        = var.compute_node_count
+  compute_node_vm_size      = var.compute_node_vm_size
+  compute_node_zones        = var.compute_node_zones
+  compute_node_spot         = var.compute_node_spot
+  compute_node_max_pods     = var.compute_node_max_pods
+  compute_node_os_disk_type = var.compute_node_os_disk_type
 
   # Egress
   egress_public_ip_id = module.networking.egress_public_ip_id

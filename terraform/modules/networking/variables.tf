@@ -27,28 +27,15 @@ variable "vnet_address_space" {
 }
 
 #--------------------------------------------------------------
-# System Subnet
+# Cluster Subnet (unified subnet for all AKS node pools)
 #--------------------------------------------------------------
-variable "system_subnet_prefix" {
-  description = "CIDR prefix for the system node pool subnet"
+variable "cluster_subnet_prefix" {
+  description = "CIDR prefix for the unified AKS cluster subnet (system and workload node pools)"
   type        = string
 }
 
-variable "system_nsg_name" {
-  description = "Name of the NSG for the system subnet"
-  type        = string
-}
-
-#--------------------------------------------------------------
-# Workload Subnet
-#--------------------------------------------------------------
-variable "workload_subnet_prefix" {
-  description = "CIDR prefix for the workload node pool subnet"
-  type        = string
-}
-
-variable "workload_nsg_name" {
-  description = "Name of the NSG for the workload subnet"
+variable "cluster_nsg_name" {
+  description = "Name of the NSG for the cluster subnet"
   type        = string
 }
 

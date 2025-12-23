@@ -42,13 +42,8 @@ variable "vnet_address_space" {
   type        = list(string)
 }
 
-variable "system_subnet_prefix" {
-  description = "CIDR prefix for the system node pool subnet"
-  type        = string
-}
-
-variable "workload_subnet_prefix" {
-  description = "CIDR prefix for the workload node pool subnet"
+variable "cluster_subnet_prefix" {
+  description = "CIDR prefix for the unified AKS cluster subnet (system and workload node pools)"
   type        = string
 }
 
@@ -130,45 +125,39 @@ variable "system_node_os_disk_type" {
   default     = "Ephemeral"
 }
 
-# Workload Node Pool
-variable "enable_workload_node_pool" {
-  description = "Enable separate workload node pool"
-  type        = bool
-  default     = true
-}
-
-variable "workload_node_count" {
-  description = "Number of nodes in the workload node pool"
+# Compute Node Pool
+variable "compute_node_count" {
+  description = "Number of nodes in the compute node pool"
   type        = number
   default     = 2
 }
 
-variable "workload_node_vm_size" {
-  description = "VM size for workload node pool"
+variable "compute_node_vm_size" {
+  description = "VM size for compute node pool"
   type        = string
   default     = "Standard_B2ms"
 }
 
-variable "workload_node_zones" {
-  description = "Availability zones for workload node pool. Empty list disables zones."
+variable "compute_node_zones" {
+  description = "Availability zones for compute node pool. Empty list disables zones."
   type        = list(string)
   default     = ["1", "2", "3"]
 }
 
-variable "workload_node_spot" {
-  description = "Whether to use spot instances for workload node pool"
+variable "compute_node_spot" {
+  description = "Whether to use spot instances for compute node pool"
   type        = bool
   default     = true
 }
 
-variable "workload_node_max_pods" {
-  description = "Maximum number of pods per node in the workload node pool"
+variable "compute_node_max_pods" {
+  description = "Maximum number of pods per node in the compute node pool"
   type        = number
   default     = 30
 }
 
-variable "workload_node_os_disk_type" {
-  description = "OS disk type for workload node pool (Ephemeral or Managed)"
+variable "compute_node_os_disk_type" {
+  description = "OS disk type for compute node pool (Ephemeral or Managed)"
   type        = string
   default     = "Managed"
 }

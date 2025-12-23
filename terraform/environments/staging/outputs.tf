@@ -26,14 +26,9 @@ output "vnet_name" {
   value       = module.networking.vnet_name
 }
 
-output "system_subnet_id" {
-  description = "ID of the system node pool subnet"
-  value       = module.networking.system_subnet_id
-}
-
-output "workload_subnet_id" {
-  description = "ID of the workload node pool subnet"
-  value       = module.networking.workload_subnet_id
+output "cluster_subnet_id" {
+  description = "ID of the unified AKS cluster subnet"
+  value       = module.networking.cluster_subnet_id
 }
 
 output "private_subnet_id" {

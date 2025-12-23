@@ -71,7 +71,7 @@ jobs:
         id: plan
         run: |
           set +e
-          terraform plan -var-file=staging.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          terraform plan -var-file=parameters.tfvars -detailed-exitcode -no-color -out=tfplan 2>&1 | tee plan_output.txt
           EXIT_CODE=${PIPESTATUS[0]}
           
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT

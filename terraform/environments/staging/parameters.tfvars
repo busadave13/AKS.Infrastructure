@@ -18,10 +18,9 @@ tags = {
 # Networking
 # Using 10.1.0.0/16 to avoid conflicts with dev (10.0.0.0/16)
 #--------------------------------------------------------------
-vnet_address_space     = ["10.1.0.0/16"]
-system_subnet_prefix   = "10.1.0.0/23"
-workload_subnet_prefix = "10.1.2.0/23"
-private_subnet_prefix  = "10.1.4.0/24"
+vnet_address_space    = ["10.1.0.0/16"]
+cluster_subnet_prefix = "10.1.0.0/22"
+private_subnet_prefix = "10.1.4.0/24"
 
 # Disable private endpoints for staging (enable for more production-like setup)
 enable_private_endpoints = false
@@ -52,13 +51,13 @@ system_node_zones        = [] # No zones for multi-node cluster without zone red
 system_node_max_pods     = 50
 system_node_os_disk_type = "Managed"
 
-# Workload Node Pool - 1 node, no availability zones
-enable_workload_node_pool = true
-workload_node_count       = 1
-workload_node_vm_size     = "Standard_B4ms"
-workload_node_zones       = [] # No zones for multi-node cluster without zone redundancy
-workload_node_spot        = false
-workload_node_max_pods    = 30
+# Compute Node Pool - 1 node, no availability zones
+compute_node_count        = 1
+compute_node_vm_size      = "Standard_B4ms"
+compute_node_zones        = [] # No zones for cost savings in staging
+compute_node_spot         = false
+compute_node_max_pods     = 30
+compute_node_os_disk_type = "Managed"
 
 #--------------------------------------------------------------
 # ACR

@@ -1,12 +1,6 @@
 name: 'Terraform'
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'terraform/**'
-      - '.github/workflows/terraform.yml'
   pull_request:
     branches:
       - main
@@ -18,20 +12,11 @@ on:
       action:
         description: 'Terraform action to perform'
         required: true
-        default: 'plan'
+        default: 'apply'
         type: choice
         options:
-          - plan
           - apply
           - destroy
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-          - dev
-          - staging
 
 permissions:
   id-token: write
@@ -44,12 +29,10 @@ env:
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-  # Set environment - use input for workflow_dispatch, default to staging for push/PR
-  TF_ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
 
 # Prevent concurrent runs to avoid state conflicts
 concurrency:
-  group: terraform-${{ github.event.inputs.environment || 'staging' }}
+  group: terraform-staging
   cancel-in-progress: false
 
 jobs:
@@ -58,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform/environments/${{ github.event.inputs.environment || 'staging' }}
+        working-directory: terraform/environments/staging
 
     steps:
       - name: Checkout
@@ -113,13 +96,12 @@ jobs:
     name: 'Plan'
     runs-on: ubuntu-latest
     needs: validate
-    if: github.event_name == 'pull_request' || github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action != 'destroy')
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
     defaults:
       run:
-        working-directory: terraform/environments/${{ github.event.inputs.environment || 'staging' }}
+        working-directory: terraform/environments/staging
     outputs:
       plan_exit_code: ${{ steps.plan.outputs.exitcode }}
-      environment: ${{ github.event.inputs.environment || 'staging' }}
 
     steps:
       - name: Checkout
@@ -154,28 +136,25 @@ jobs:
       - name: Upload Terraform Plan
         uses: actions/upload-artifact@v4
         with:
-          name: tfplan-${{ github.event.inputs.environment || 'staging' }}-${{ github.run_id }}
+          name: tfplan-staging-${{ github.run_id }}
           path: |
-            terraform/environments/${{ github.event.inputs.environment || 'staging' }}/tfplan
-            terraform/environments/${{ github.event.inputs.environment || 'staging' }}/plan_output.txt
+            terraform/environments/staging/tfplan
+            terraform/environments/staging/plan_output.txt
           retention-days: 5
 
       - name: Post Plan to PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
-        env:
-          TF_ENV: ${{ github.event.inputs.environment || 'staging' }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const env = process.env.TF_ENV;
-            const planOutput = fs.readFileSync(`terraform/environments/${env}/plan_output.txt`, 'utf8');
+            const planOutput = fs.readFileSync('terraform/environments/staging/plan_output.txt', 'utf8');
             const truncatedPlan = planOutput.length > 65000 
               ? planOutput.substring(0, 65000) + '\n... (truncated)'
               : planOutput;
             
-            const output = `#### Terraform Plan 📖 (Environment: ${env})
+            const output = `#### Terraform Plan 📖 (Environment: staging)
             
             <details><summary>Show Plan</summary>
             
@@ -198,11 +177,11 @@ jobs:
     name: 'Apply'
     runs-on: ubuntu-latest
     needs: plan
-    environment: ${{ github.event.inputs.environment || 'staging' }}
+    environment: staging
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply' && needs.plan.outputs.plan_exit_code == '2'
     defaults:
       run:
-        working-directory: terraform/environments/${{ github.event.inputs.environment || 'staging' }}
+        working-directory: terraform/environments/staging
 
     steps:
       - name: Checkout
@@ -226,8 +205,8 @@ jobs:
       - name: Download Terraform Plan
         uses: actions/download-artifact@v4
         with:
-          name: tfplan-${{ github.event.inputs.environment || 'staging' }}-${{ github.run_id }}
-          path: terraform/environments/${{ github.event.inputs.environment || 'staging' }}
+          name: tfplan-staging-${{ github.run_id }}
+          path: terraform/environments/staging
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
@@ -236,11 +215,11 @@ jobs:
     name: 'Destroy'
     runs-on: ubuntu-latest
     needs: validate
-    environment: ${{ github.event.inputs.environment || 'staging' }}-destroy
+    environment: staging-destroy
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
     defaults:
       run:
-        working-directory: terraform/environments/${{ github.event.inputs.environment || 'staging' }}
+        working-directory: terraform/environments/staging
 
     steps:
       - name: Checkout

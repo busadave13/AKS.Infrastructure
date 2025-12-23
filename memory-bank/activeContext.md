@@ -1,72 +1,83 @@
-# Active Context: AKS.Infrastructure
+# Active Context
 
-## Current State
-- **Project Phase**: Infrastructure Development
-- **Environment**: Staging
-- **Region**: West US 2 (westus2)
-- **Identifier**: xpci
-- **CI/CD**: GitHub Actions (migrated from Azure DevOps)
+## Current Focus
+**Completed**: Consolidated AKS networking infrastructure and simplified node pool configuration.
 
-## Recent Changes
-- Added Network Contributor role assignment for AKS control plane identity:
-  - Added `ingress_resource_group_id` variable to AKS module
-  - Control plane identity now has Network Contributor role on the main resource group
-  - This allows AKS to configure load balancer frontend with the ingress public IP
-- Added static ingress public IP with DNS support:
-  - Created `pip-ingress-*` public IP in networking module with DNS label
-  - Staging uses DNS label `davhar` → `davhar.eastus2.cloudapp.azure.com`
-  - Dev uses DNS label `davhar-dev` → `davhar-dev.<region>.cloudapp.azure.com`
-  - Added outputs for `ingress_public_ip_address` and `ingress_public_ip_fqdn`
-  - This IP can be used by Istio ingress gateway for internet-accessible services
-- Updated staging to multi-node cluster configuration:
-  - System node pool: 1 node, Standard_D4s_v5, max 50 pods, no availability zones (changed from D4as_v5 for ephemeral OS disk support)
-  - Workload node pool: 1 node, Standard_B4ms, max 30 pods, no availability zones, regular (non-spot) instances
-  - Added configurable `system_node_max_pods` and `workload_node_max_pods` variables to AKS module
-  - System pod isolation enabled via `only_critical_addons_enabled` when workload pool is active
-- Added AKS RBAC role assignment support: New `admin_user_object_ids` variable in AKS module to grant "Azure Kubernetes Service RBAC Cluster Admin" role to individual users
-- Fixed Flux Configuration error: Removed invalid cross-configuration kustomization `depends_on` in gitops module (Azure API does not support referencing kustomizations across different Flux configurations)
-- Refactored staging environment to use common module for CAF-compliant naming
-- Added `identifier` variable (xpci) for resource naming
-- Created `provider.tf` to separate provider configuration from main.tf
-- Updated common module output name from `region_abbrev` to `region_abbreviation`
-- Added monitoring module outputs.tf
-- Resource naming now follows pattern: `{resource-type}-{identifier}-{environment}-{region-abbreviation}`
-- Removed hardcoded resource names (vnet_name, acr_name) - now computed from common module
-- Removed 'platform' from naming convention (e.g., `rg-aks-dev-wus2` instead of `rg-aks-platform-dev-wus2`)
-- Migrated CI/CD from Azure DevOps Pipelines to GitHub Actions
-- Created `.github/workflows/terraform.yml` with OIDC authentication
-- Removed `pipelines/azure-pipelines-terraform.yml`
-- Updated documentation for GitHub Actions workflow
-- Removed `gitops-config/` directory from this repository
-- Updated Terraform gitops module README to clarify separate repository pattern
+## Recent Changes (December 23, 2025)
 
-## Active Work Items
-Staging environment terraform refactoring complete.
+### 1. Networking Infrastructure Consolidation
+Replaced separate system/workload subnets with a unified cluster subnet:
 
-## Pending Tasks
-1. Apply same refactoring pattern to other environments (dev, prod)
-2. Create the separate AKS.GitOps repository
-3. Set up GitHub OIDC federation with Azure AD
-4. Configure GitHub repository secrets
-5. Deploy infrastructure using Terraform
-6. Validate GitOps sync from separate repository
+- **Single Cluster Subnet**: Both system and compute node pools now use `snet-cluster-*` (10.1.0.0/22)
+- **Updated NSG Rules**: Fixed `destination_address_prefix = "*"` to allow Azure LB DNAT'd traffic
+- **Ingress Ports**: 80 (HTTP), 443 (HTTPS), 15021 (Istio health), 30000-32767 (NodePort range)
 
-## Key Decisions Made
-| Date | Decision | Rationale |
-|------|----------|-----------|
-| 2024-12 | Common module for naming | Consistent CAF-compliant naming across all resources |
-| 2024-12 | Identifier-based naming | `xpci` identifier provides project-specific resource names |
-| 2024-12 | Provider in separate file | Better separation of concerns, cleaner main.tf |
-| 2024-12 | GitHub Actions for CI/CD | Simpler OIDC setup, native GitHub integration, no additional tooling |
-| 2024-12 | Separate GitOps repository | Independent versioning, access control, release management |
-| 2024-12 | Use Spot instances for workloads | 60-90% cost savings on non-critical dev workloads |
-| 2024-12 | Public AKS cluster | Simplifies development access; secured via Azure RBAC |
+### 2. Node Pool Renaming
+Renamed "workload" node pool to "compute" for clarity:
 
-## Current Blockers
-None identified.
+- `workload_node_*` → `compute_node_*` in all modules and environments
+- Removed `enable_workload_node_pool` toggle - compute node pool is now always created
+- Two-node-pool architecture is now standard (no single-node mode)
 
-## Notes
-- GitOps configuration should be managed in AKS.GitOps repository
-- Flux v2 is configured to sync from the separate repository
-- The `gitops_repo_url` variable in Terraform should point to AKS.GitOps
-- GitHub Actions uses OIDC for passwordless Azure authentication
+### 3. Removed Dev Environment
+- Deleted `terraform/environments/dev/` directory
+- Only staging environment remains for development/testing
+
+### Files Modified
+**Modules:**
+- `terraform/modules/networking/` - Unified cluster subnet with NSG
+- `terraform/modules/aks/variables.tf` - Renamed workload to compute
+- `terraform/modules/aks/main.tf` - Renamed node pool, removed conditional
+- `terraform/modules/aks/outputs.tf` - Updated outputs for compute pool
+
+**Environments:**
+- `terraform/environments/staging/variables.tf` - Renamed variables
+- `terraform/environments/staging/main.tf` - Updated module calls
+- `terraform/environments/staging/parameters.tfvars` - Updated parameters
+
+## Architecture
+
+```
+VNet: 10.1.0.0/16
+├── snet-cluster: 10.1.0.0/22 (1022 IPs for all AKS nodes)
+│   ├── system node pool (1 node, Standard_D4as_v5)
+│   └── compute node pool (1 node, Standard_B4ms)
+└── snet-private: 10.1.4.0/24 (private endpoints)
+
+NSG: nsg-cluster-*
+├── AllowHTTPInbound (80) → *
+├── AllowHTTPSInbound (443) → *
+├── AllowIstioHealthInbound (15021) → *
+├── AllowNodePortInbound (30000-32767) → *
+└── Default Azure rules
+```
+
+## GitHub Actions Workflow Updates (December 23, 2025)
+
+### terraform.yml Changes
+- **Removed push trigger** - No longer runs on merge to main
+- **Simplified workflow_dispatch** - Only `apply` and `destroy` options (no plan-only)
+- **Always runs apply** - When triggered manually, runs validate → plan → apply with environment approval
+- **Removed dev environment** - Only staging remains
+
+### Workflow Flow
+```
+Manual Trigger (workflow_dispatch)
+    ↓
+validate → plan → apply (requires staging environment approval)
+```
+
+### terraform-drift.yml Fix
+- Corrected tfvars filename from `staging.tfvars` to `parameters.tfvars`
+
+## Pending Actions
+1. **User must commit/push changes** and apply via CI/CD pipeline
+2. **Terraform apply will recreate AKS cluster** (subnet is immutable)
+3. **GitOps (Flux) will restore** Istio, Gateway, and applications
+4. **Test ingress**: `curl http://davhar.westus2.cloudapp.azure.com`
+
+## Key Technical Details
+- Azure CNI Overlay networking with single subnet for all node pools
+- Pod CIDR: 10.244.0.0/16 (overlay network)
+- Service CIDR: 10.245.0.0/16
+- Kubernetes version: 1.32

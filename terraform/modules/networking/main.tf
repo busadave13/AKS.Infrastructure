@@ -25,27 +25,12 @@ resource "azurerm_virtual_network" "main" {
 # Subnets
 #--------------------------------------------------------------
 
-# System Node Pool Subnet
-resource "azurerm_subnet" "system" {
-  name                 = "system-subnet"
+# Cluster Subnet (unified subnet for all AKS node pools)
+resource "azurerm_subnet" "cluster" {
+  name                 = "cluster-subnet"
   resource_group_name  = azurerm_resource_group.main.name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.system_subnet_prefix]
-
-  # Required for Azure CNI Overlay
-  service_endpoints = [
-    "Microsoft.ContainerRegistry",
-    "Microsoft.KeyVault",
-    "Microsoft.Storage"
-  ]
-}
-
-# Workload Node Pool Subnet
-resource "azurerm_subnet" "workload" {
-  name                 = "workload-subnet"
-  resource_group_name  = azurerm_resource_group.main.name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [var.workload_subnet_prefix]
+  address_prefixes     = [var.cluster_subnet_prefix]
 
   # Required for Azure CNI Overlay
   service_endpoints = [
@@ -70,14 +55,19 @@ resource "azurerm_subnet" "private" {
 # Network Security Groups
 #--------------------------------------------------------------
 
-# System Subnet NSG
-resource "azurerm_network_security_group" "system" {
-  name                = var.system_nsg_name
+# Cluster Subnet NSG (unified NSG for all AKS node pools)
+# NSG rules use destination_address_prefix = "*" because Azure Load Balancer
+# performs DNAT before packets reach the NSG, so the destination IP is the
+# public IP, not the subnet CIDR.
+resource "azurerm_network_security_group" "cluster" {
+  name                = var.cluster_nsg_name
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
   tags                = var.tags
 
-  # Allow HTTPS inbound from Internet
+  # Allow HTTPS inbound from Internet (for Istio Gateway)
+  # destination_address_prefix must be "*" because Azure LB DNAT'd traffic
+  # arrives with public IP as destination, not subnet CIDR
   security_rule {
     name                       = "AllowHTTPS"
     priority                   = 100
@@ -87,10 +77,10 @@ resource "azurerm_network_security_group" "system" {
     source_port_range          = "*"
     destination_port_range     = "443"
     source_address_prefix      = "Internet"
-    destination_address_prefix = var.system_subnet_prefix
+    destination_address_prefix = "*"
   }
 
-  # Allow HTTP inbound from Internet
+  # Allow HTTP inbound from Internet (for Istio Gateway)
   security_rule {
     name                       = "AllowHTTP"
     priority                   = 110
@@ -100,80 +90,33 @@ resource "azurerm_network_security_group" "system" {
     source_port_range          = "*"
     destination_port_range     = "80"
     source_address_prefix      = "Internet"
-    destination_address_prefix = var.system_subnet_prefix
-  }
-
-  # Allow all intra-VNet traffic (required for AKS cross-node communication)
-  security_rule {
-    name                       = "AllowVNetInbound"
-    priority                   = 200
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "VirtualNetwork"
-    destination_address_prefix = "VirtualNetwork"
-  }
-
-  # Allow Azure Load Balancer health probes
-  security_rule {
-    name                       = "AllowAzureLoadBalancer"
-    priority                   = 210
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "AzureLoadBalancer"
     destination_address_prefix = "*"
   }
 
-  # Deny all other inbound traffic
+  # Allow Istio health probe port from Internet
   security_rule {
-    name                       = "DenyAllInbound"
-    priority                   = 4096
-    direction                  = "Inbound"
-    access                     = "Deny"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-}
-
-# Workload Subnet NSG
-resource "azurerm_network_security_group" "workload" {
-  name                = var.workload_nsg_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
-  tags                = var.tags
-
-  # Allow HTTPS inbound from Internet
-  security_rule {
-    name                       = "AllowHTTPS"
-    priority                   = 100
+    name                       = "AllowIstioHealthProbe"
+    priority                   = 120
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_range     = "443"
+    destination_port_range     = "15021"
     source_address_prefix      = "Internet"
-    destination_address_prefix = var.workload_subnet_prefix
+    destination_address_prefix = "*"
   }
 
-  # Allow HTTP inbound from Internet
+  # Allow Kubernetes NodePort range from Internet (for LoadBalancer services)
   security_rule {
-    name                       = "AllowHTTP"
-    priority                   = 110
+    name                       = "AllowNodePorts"
+    priority                   = 130
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
-    destination_port_range     = "80"
+    destination_port_range     = "30000-32767"
     source_address_prefix      = "Internet"
-    destination_address_prefix = var.workload_subnet_prefix
+    destination_address_prefix = "*"
   }
 
   # Allow all intra-VNet traffic (required for AKS cross-node communication)
@@ -223,29 +166,16 @@ resource "azurerm_network_security_group" "private" {
   resource_group_name = azurerm_resource_group.main.name
   tags                = var.tags
 
-  # Allow HTTPS inbound
+  # Allow HTTPS inbound from VNet only (private endpoints)
   security_rule {
-    name                       = "AllowHTTPS"
+    name                       = "AllowHTTPSFromVNet"
     priority                   = 100
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "443"
-    source_address_prefix      = "Internet"
-    destination_address_prefix = var.private_subnet_prefix
-  }
-
-  # Allow HTTP inbound
-  security_rule {
-    name                       = "AllowHTTP"
-    priority                   = 110
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "80"
-    source_address_prefix      = "Internet"
+    source_address_prefix      = "VirtualNetwork"
     destination_address_prefix = var.private_subnet_prefix
   }
 
@@ -267,16 +197,10 @@ resource "azurerm_network_security_group" "private" {
 # NSG Subnet Associations
 #--------------------------------------------------------------
 
-# Associate NSG with System subnet
-resource "azurerm_subnet_network_security_group_association" "system" {
-  subnet_id                 = azurerm_subnet.system.id
-  network_security_group_id = azurerm_network_security_group.system.id
-}
-
-# Associate NSG with Workload subnet
-resource "azurerm_subnet_network_security_group_association" "workload" {
-  subnet_id                 = azurerm_subnet.workload.id
-  network_security_group_id = azurerm_network_security_group.workload.id
+# Associate NSG with Cluster subnet
+resource "azurerm_subnet_network_security_group_association" "cluster" {
+  subnet_id                 = azurerm_subnet.cluster.id
+  network_security_group_id = azurerm_network_security_group.cluster.id
 }
 
 # Associate NSG with Private subnet

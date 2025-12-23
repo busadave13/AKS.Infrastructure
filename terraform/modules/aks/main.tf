@@ -1,5 +1,5 @@
 # AKS Module
-# Creates AKS cluster with system and workload node pools
+# Creates AKS cluster with system and compute node pools
 
 #--------------------------------------------------------------
 # User Assigned Managed Identities
@@ -79,13 +79,12 @@ resource "azurerm_kubernetes_cluster" "main" {
     os_disk_size_gb      = 30
     os_sku               = "Ubuntu"
     max_pods             = var.system_node_max_pods
-    vnet_subnet_id       = var.system_subnet_id
+    vnet_subnet_id       = var.cluster_subnet_id
 
-    # Only enable critical addons restriction when workload pool exists
-    # When no workload pool, workloads must run on system nodes
-    only_critical_addons_enabled = var.enable_workload_node_pool
+    # Only allow critical addons on system nodes
+    only_critical_addons_enabled = true
 
-    # Availability zones - use null when empty list (for single-node clusters)
+    # Availability zones
     zones = length(var.system_node_zones) > 0 ? var.system_node_zones : null
 
     node_labels = {
@@ -176,47 +175,45 @@ resource "azurerm_kubernetes_cluster" "main" {
 }
 
 #--------------------------------------------------------------
-# Workload Node Pool (Optional - Spot Instances)
+# Compute Node Pool (User workloads - Spot Instances)
 #--------------------------------------------------------------
-resource "azurerm_kubernetes_cluster_node_pool" "workload" {
-  count = var.enable_workload_node_pool ? 1 : 0
-
-  name                        = "workload"
+resource "azurerm_kubernetes_cluster_node_pool" "compute" {
+  name                        = "compute"
   kubernetes_cluster_id       = azurerm_kubernetes_cluster.main.id
-  vm_size                     = var.workload_node_vm_size
+  vm_size                     = var.compute_node_vm_size
   mode                        = "User"
   os_type                     = "Linux"
   os_sku                      = "Ubuntu"
-  os_disk_type                = var.workload_node_os_disk_type
+  os_disk_type                = var.compute_node_os_disk_type
   os_disk_size_gb             = 30
-  max_pods                    = var.workload_node_max_pods
-  vnet_subnet_id              = var.workload_subnet_id
-  temporary_name_for_rotation = "workloadtmp"
+  max_pods                    = var.compute_node_max_pods
+  vnet_subnet_id              = var.cluster_subnet_id
+  temporary_name_for_rotation = "computetmp"
   tags                        = var.tags
 
   # Fixed node count (no autoscaling)
   auto_scaling_enabled = false
-  node_count           = var.workload_node_count
+  node_count           = var.compute_node_count
 
-  # Availability zones - use null when empty list
-  zones = length(var.workload_node_zones) > 0 ? var.workload_node_zones : null
+  # Availability zones
+  zones = length(var.compute_node_zones) > 0 ? var.compute_node_zones : null
 
   # Spot instances for cost savings
-  priority        = var.workload_node_spot ? "Spot" : "Regular"
-  eviction_policy = var.workload_node_spot ? "Delete" : null
-  spot_max_price  = var.workload_node_spot ? -1 : null
+  priority        = var.compute_node_spot ? "Spot" : "Regular"
+  eviction_policy = var.compute_node_spot ? "Delete" : null
+  spot_max_price  = var.compute_node_spot ? -1 : null
 
   node_labels = {
-    "nodepool" = "workload"
+    "nodepool" = "compute"
   }
 
-  node_taints = var.workload_node_spot ? [
+  node_taints = var.compute_node_spot ? [
     "kubernetes.azure.com/scalesetpriority=spot:NoSchedule"
   ] : []
 
   # Upgrade settings - not allowed for spot node pools
   dynamic "upgrade_settings" {
-    for_each = var.workload_node_spot ? [] : [1]
+    for_each = var.compute_node_spot ? [] : [1]
     content {
       max_surge = "10%"
     }

@@ -105,12 +105,12 @@ output "system_node_pool_name" {
   value       = "system"
 }
 
-output "workload_node_pool_name" {
-  description = "Name of the workload node pool (null if disabled)"
-  value       = var.enable_workload_node_pool ? azurerm_kubernetes_cluster_node_pool.workload[0].name : null
+output "compute_node_pool_name" {
+  description = "Name of the compute node pool"
+  value       = azurerm_kubernetes_cluster_node_pool.compute.name
 }
 
-output "workload_node_pool_id" {
-  description = "ID of the workload node pool (null if disabled)"
-  value       = var.enable_workload_node_pool ? azurerm_kubernetes_cluster_node_pool.workload[0].id : null
+output "compute_node_pool_id" {
+  description = "ID of the compute node pool"
+  value       = azurerm_kubernetes_cluster_node_pool.compute.id
 }
