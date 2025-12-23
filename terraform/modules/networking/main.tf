@@ -77,7 +77,7 @@ resource "azurerm_network_security_group" "system" {
   resource_group_name = azurerm_resource_group.main.name
   tags                = var.tags
 
-  # Allow HTTPS inbound
+  # Allow HTTPS inbound from Internet
   security_rule {
     name                       = "AllowHTTPS"
     priority                   = 100
@@ -90,7 +90,7 @@ resource "azurerm_network_security_group" "system" {
     destination_address_prefix = var.system_subnet_prefix
   }
 
-  # Allow HTTP inbound
+  # Allow HTTP inbound from Internet
   security_rule {
     name                       = "AllowHTTP"
     priority                   = 110
@@ -101,6 +101,32 @@ resource "azurerm_network_security_group" "system" {
     destination_port_range     = "80"
     source_address_prefix      = "Internet"
     destination_address_prefix = var.system_subnet_prefix
+  }
+
+  # Allow all intra-VNet traffic (required for AKS cross-node communication)
+  security_rule {
+    name                       = "AllowVNetInbound"
+    priority                   = 200
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  # Allow Azure Load Balancer health probes
+  security_rule {
+    name                       = "AllowAzureLoadBalancer"
+    priority                   = 210
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "AzureLoadBalancer"
+    destination_address_prefix = "*"
   }
 
   # Deny all other inbound traffic
@@ -124,7 +150,7 @@ resource "azurerm_network_security_group" "workload" {
   resource_group_name = azurerm_resource_group.main.name
   tags                = var.tags
 
-  # Allow HTTPS inbound
+  # Allow HTTPS inbound from Internet
   security_rule {
     name                       = "AllowHTTPS"
     priority                   = 100
@@ -137,7 +163,7 @@ resource "azurerm_network_security_group" "workload" {
     destination_address_prefix = var.workload_subnet_prefix
   }
 
-  # Allow HTTP inbound
+  # Allow HTTP inbound from Internet
   security_rule {
     name                       = "AllowHTTP"
     priority                   = 110
@@ -148,6 +174,32 @@ resource "azurerm_network_security_group" "workload" {
     destination_port_range     = "80"
     source_address_prefix      = "Internet"
     destination_address_prefix = var.workload_subnet_prefix
+  }
+
+  # Allow all intra-VNet traffic (required for AKS cross-node communication)
+  security_rule {
+    name                       = "AllowVNetInbound"
+    priority                   = 200
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "VirtualNetwork"
+    destination_address_prefix = "VirtualNetwork"
+  }
+
+  # Allow Azure Load Balancer health probes
+  security_rule {
+    name                       = "AllowAzureLoadBalancer"
+    priority                   = 210
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "*"
+    source_port_range          = "*"
+    destination_port_range     = "*"
+    source_address_prefix      = "AzureLoadBalancer"
+    destination_address_prefix = "*"
   }
 
   # Deny all other inbound traffic
