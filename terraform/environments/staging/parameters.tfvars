@@ -45,17 +45,13 @@ aks_admin_group_object_ids = []
 # Add your Azure AD user object IDs for AKS admin access
 aks_admin_user_object_ids = ["197a7ad1-564b-4c89-9934-c50f7da5de68"]
 
-# System Node Pool
-system_node_count   = 2
-system_node_vm_size = "Standard_B2ms"
-system_node_zones   = ["1", "2", "3"]
+# System Node Pool - Single node, no availability zones
+system_node_count   = 1
+system_node_vm_size = "Standard_B4ms"
+system_node_zones   = [] # No zones for single-node cluster
 
-# Workload Node Pool
-enable_workload_node_pool = true
-workload_node_count       = 2
-workload_node_vm_size     = "Standard_B2ms"
-workload_node_zones       = ["1", "2", "3"]
-workload_node_spot        = false
+# Workload Node Pool - Disabled (workloads run on system node)
+enable_workload_node_pool = false
 
 #--------------------------------------------------------------
 # ACR
