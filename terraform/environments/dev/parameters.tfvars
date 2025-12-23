@@ -48,7 +48,7 @@ aks_admin_user_object_ids = ["197a7ad1-564b-4c89-9934-c50f7da5de68"]
 
 # System Node Pool - Single node, no availability zones
 system_node_count   = 1
-system_node_vm_size = "Standard_B2ms"
+system_node_vm_size = "Standard_B4ms"
 system_node_zones   = [] # No zones for single-node cluster
 
 # Workload Node Pool - Disabled (workloads run on system node)
