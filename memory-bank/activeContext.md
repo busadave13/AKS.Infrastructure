@@ -8,6 +8,12 @@
 - **CI/CD**: GitHub Actions (migrated from Azure DevOps)
 
 ## Recent Changes
+- Added static ingress public IP with DNS support:
+  - Created `pip-ingress-*` public IP in networking module with DNS label
+  - Staging uses DNS label `davhar` → `davhar.eastus2.cloudapp.azure.com`
+  - Dev uses DNS label `davhar-dev` → `davhar-dev.<region>.cloudapp.azure.com`
+  - Added outputs for `ingress_public_ip_address` and `ingress_public_ip_fqdn`
+  - This IP can be used by Istio ingress gateway for internet-accessible services
 - Updated staging to multi-node cluster configuration:
   - System node pool: 1 node, Standard_D4s_v5, max 50 pods, no availability zones (changed from D4as_v5 for ephemeral OS disk support)
   - Workload node pool: 1 node, Standard_B4ms, max 30 pods, no availability zones, regular (non-spot) instances

@@ -46,6 +46,16 @@ output "egress_public_ip_address" {
   value       = module.networking.egress_public_ip_address
 }
 
+output "ingress_public_ip_address" {
+  description = "Public IP address for ingress traffic"
+  value       = module.networking.ingress_public_ip_address
+}
+
+output "ingress_public_ip_fqdn" {
+  description = "FQDN for ingress traffic (davhar-dev.<region>.cloudapp.azure.com)"
+  value       = module.networking.ingress_public_ip_fqdn
+}
+
 #--------------------------------------------------------------
 # AKS
 #--------------------------------------------------------------

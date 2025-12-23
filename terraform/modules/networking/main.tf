@@ -299,6 +299,20 @@ resource "azurerm_public_ip" "egress" {
 }
 
 #--------------------------------------------------------------
+# Public IP for Ingress (with DNS label)
+#--------------------------------------------------------------
+resource "azurerm_public_ip" "ingress" {
+  name                = var.ingress_public_ip_name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  domain_name_label   = var.ingress_dns_label
+  zones               = length(var.zones) > 0 ? var.zones : null
+  tags                = var.tags
+}
+
+#--------------------------------------------------------------
 # Private DNS Zones
 #--------------------------------------------------------------
 

@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "PodInfo",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

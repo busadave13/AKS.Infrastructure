@@ -74,6 +74,19 @@ variable "egress_public_ip_name" {
 }
 
 #--------------------------------------------------------------
+# Public IP for Ingress
+#--------------------------------------------------------------
+variable "ingress_public_ip_name" {
+  description = "Name of the public IP for ingress traffic"
+  type        = string
+}
+
+variable "ingress_dns_label" {
+  description = "DNS label for the ingress public IP (creates <label>.<region>.cloudapp.azure.com)"
+  type        = string
+}
+
+#--------------------------------------------------------------
 # Availability Zones
 #--------------------------------------------------------------
 variable "zones" {

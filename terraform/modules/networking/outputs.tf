@@ -110,3 +110,21 @@ output "egress_public_ip_address" {
   description = "IP address of the public IP for load balancer egress"
   value       = azurerm_public_ip.egress.ip_address
 }
+
+#--------------------------------------------------------------
+# Ingress Public IP
+#--------------------------------------------------------------
+output "ingress_public_ip_id" {
+  description = "ID of the public IP for ingress traffic"
+  value       = azurerm_public_ip.ingress.id
+}
+
+output "ingress_public_ip_address" {
+  description = "IP address of the public IP for ingress traffic"
+  value       = azurerm_public_ip.ingress.ip_address
+}
+
+output "ingress_public_ip_fqdn" {
+  description = "FQDN of the public IP for ingress traffic"
+  value       = azurerm_public_ip.ingress.fqdn
+}
