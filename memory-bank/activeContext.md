@@ -9,7 +9,7 @@
 
 ## Recent Changes
 - Updated staging to multi-node cluster configuration:
-  - System node pool: 1 node, Standard_D4as_v5, max 50 pods, no availability zones
+  - System node pool: 1 node, Standard_D4s_v5, max 50 pods, no availability zones (changed from D4as_v5 for ephemeral OS disk support)
   - Workload node pool: 1 node, Standard_B4ms, max 30 pods, no availability zones, regular (non-spot) instances
   - Added configurable `system_node_max_pods` and `workload_node_max_pods` variables to AKS module
   - System pod isolation enabled via `only_critical_addons_enabled` when workload pool is active
