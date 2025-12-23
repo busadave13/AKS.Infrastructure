@@ -1,25 +1,33 @@
 # Active Context
 
 ## Current Focus
-**Completed**: Consolidated AKS networking infrastructure and simplified node pool configuration.
+**Completed**: Consolidated AKS networking infrastructure, simplified node pool configuration, and updated naming conventions.
 
 ## Recent Changes (December 23, 2025)
 
-### 1. Networking Infrastructure Consolidation
+### 1. Identifier and DNS Label Update
+Changed project identifier and ingress DNS configuration:
+
+- **Identifier**: Changed from `xpci` to `azr`
+- **Ingress DNS Label**: Now uses `var.identifier` (dynamic) instead of hardcoded value
+- **FQDN**: `azr.westus2.cloudapp.azure.com`
+- **All resource names** now use `azr-staging-wus2` pattern
+
+### 2. Networking Infrastructure Consolidation
 Replaced separate system/workload subnets with a unified cluster subnet:
 
 - **Single Cluster Subnet**: Both system and compute node pools now use `snet-cluster-*` (10.1.0.0/22)
 - **Updated NSG Rules**: Fixed `destination_address_prefix = "*"` to allow Azure LB DNAT'd traffic
 - **Ingress Ports**: 80 (HTTP), 443 (HTTPS), 15021 (Istio health), 30000-32767 (NodePort range)
 
-### 2. Node Pool Renaming
+### 3. Node Pool Renaming
 Renamed "workload" node pool to "compute" for clarity:
 
 - `workload_node_*` → `compute_node_*` in all modules and environments
 - Removed `enable_workload_node_pool` toggle - compute node pool is now always created
 - Two-node-pool architecture is now standard (no single-node mode)
 
-### 3. Removed Dev Environment
+### 4. Removed Dev Environment
 - Deleted `terraform/environments/dev/` directory
 - Only staging environment remains for development/testing
 
@@ -74,7 +82,7 @@ validate → plan → apply (requires staging environment approval)
 1. **User must commit/push changes** and apply via CI/CD pipeline
 2. **Terraform apply will recreate AKS cluster** (subnet is immutable)
 3. **GitOps (Flux) will restore** Istio, Gateway, and applications
-4. **Test ingress**: `curl http://davhar.westus2.cloudapp.azure.com`
+4. **Test ingress**: `curl http://azr.westus2.cloudapp.azure.com`
 
 ## Key Technical Details
 - Azure CNI Overlay networking with single subnet for all node pools

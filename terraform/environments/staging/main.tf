@@ -44,7 +44,7 @@ module "networking" {
 
   # Public IP for Ingress (with DNS label)
   ingress_public_ip_name = "pip-ingress-${module.common.naming_prefix}"
-  ingress_dns_label      = "davhar"
+  ingress_dns_label      = var.identifier
 
   # Availability Zones - use same zones as AKS system nodes
   zones = var.system_node_zones
