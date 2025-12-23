@@ -33,7 +33,13 @@ variable "monitor_workspace_name" {
 # Azure Managed Grafana
 #--------------------------------------------------------------
 variable "enable_grafana" {
-  description = "Enable Azure Managed Grafana"
+  description = "Enable Azure Managed Grafana deployment"
+  type        = bool
+  default     = true
+}
+
+variable "deploy_dashboards" {
+  description = "Deploy Grafana dashboards via API"
   type        = bool
   default     = true
 }

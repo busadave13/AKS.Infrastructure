@@ -1,0 +1,72 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "table", "placement": "right", "showLegend": true } },
+      "targets": [
+        { "expr": "count(count(container_memory_usage_bytes{container=\"$container\", namespace=\"$namespace\"}) by (pod))", "legendFormat": "pods", "refId": "A" },
+        { "expr": "count(count(container_memory_usage_bytes{container=\"$container\", namespace=\"$namespace\"}) by (node))", "legendFormat": "hosts", "refId": "B" }
+      ],
+      "title": "Number of pods",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 } },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "table", "placement": "right", "showLegend": true } },
+      "targets": [{ "expr": "sum(rate(container_cpu_usage_seconds_total{container=\"$container\", namespace=\"$namespace\"}[5m])) by (namespace,container) / sum(container_spec_cpu_shares{container=\"$container\", namespace=\"$namespace\"} / 1024) by (namespace,container)", "legendFormat": "cpu", "refId": "A" }],
+      "title": "CPU usage (relative to request)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 6 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "table", "placement": "right", "showLegend": true } },
+      "targets": [
+        { "expr": "sum(rate(container_cpu_usage_seconds_total{container=\"$container\", namespace=\"$namespace\"}[5m])) by (pod)", "legendFormat": "{{pod}}", "refId": "A" },
+        { "expr": "sum(container_spec_cpu_quota{container=\"$container\", namespace=\"$namespace\"} / container_spec_cpu_period{container=\"$container\", namespace=\"$namespace\"}) by (namespace,container) / count(container_memory_usage_bytes{container=\"$container\", namespace=\"$namespace\"}) by (namespace,container)", "legendFormat": "limit", "refId": "B" }
+      ],
+      "title": "CPU usage (per pod)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 6 },
+      "id": 4,
+      "options": { "legend": { "displayMode": "table", "placement": "right", "showLegend": true } },
+      "targets": [
+        { "expr": "sum(container_memory_usage_bytes{container=\"$container\", namespace=\"$namespace\"}) by (pod)", "legendFormat": "{{pod}}", "refId": "A" },
+        { "expr": "sum(container_spec_memory_limit_bytes{container=\"$container\", namespace=\"$namespace\"}) by (namespace,container) / count(container_memory_usage_bytes{container=\"$container\", namespace=\"$namespace\"}) by (container,namespace)", "legendFormat": "limit", "refId": "B" }
+      ],
+      "title": "Memory usage (per pod)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["kubernetes", "app-metrics"],
+  "templating": {
+    "list": [
+      { "datasource": "Prometheus", "definition": "label_values(container_memory_usage_bytes{namespace=~\".+\",container!=\"POD\",container!=\"\"},namespace)", "name": "namespace", "label": "Namespace", "type": "query", "refresh": 1 },
+      { "datasource": "Prometheus", "definition": "label_values(container_memory_usage_bytes{namespace=~\"$namespace\",container!=\"POD\",container!=\"\"},container)", "name": "container", "label": "Container", "type": "query", "refresh": 1 }
+    ]
+  },
+  "time": { "from": "now-3h", "to": "now" },
+  "timezone": "browser",
+  "title": "Kubernetes App Metrics",
+  "uid": "kubernetes-app-metrics",
+  "version": 1
+}

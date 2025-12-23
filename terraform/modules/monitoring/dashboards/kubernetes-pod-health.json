@@ -1,0 +1,89 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "id": null,
+  "links": [],
+  "panels": [
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 100, "title": "Overview", "type": "row" },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "green", "value": null }] }, "unit": "none" } },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "sum(kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$workload.*\", condition=\"true\"})", "refId": "A" }],
+      "title": "Active Pods (Ready)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "none" } },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "sum(kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$workload.*\", condition=\"false\"}) or vector(0)", "refId": "A" }],
+      "title": "Not Ready Pods",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 10 }] }, "unit": "none" } },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "sum(kube_pod_container_status_restarts_total{namespace=~\"$namespace\", pod=~\"$workload.*\"}) or vector(0)", "refId": "A" }],
+      "title": "Total Restarts",
+      "type": "stat"
+    },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "id": 101, "title": "Restart Analysis", "type": "row" },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 6,
+      "options": { "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "right", "showLegend": true } },
+      "targets": [{ "expr": "sum by (pod) (kube_pod_container_status_restarts_total{namespace=~\"$namespace\", pod=~\"$workload.*\"})", "legendFormat": "{{pod}}", "refId": "A" }],
+      "title": "Container Restarts Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": {}, "overrides": [{ "matcher": { "id": "byName", "options": "OOMKilled" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "table", "placement": "right", "showLegend": true }, "pieType": "pie", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "sum by (reason) (kube_pod_container_status_last_terminated_reason{namespace=~\"$namespace\", pod=~\"$workload.*\"})", "legendFormat": "{{reason}}", "refId": "A" }],
+      "title": "Termination Reasons",
+      "type": "piechart"
+    },
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }, "id": 102, "title": "Readiness Tracking", "type": "row" },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [{ "matcher": { "id": "byName", "options": "Ready" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] }, { "matcher": { "id": "byName", "options": "Not Ready" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "id": 8,
+      "options": { "legend": { "calcs": ["lastNotNull", "min", "max"], "displayMode": "table", "placement": "right", "showLegend": true } },
+      "targets": [
+        { "expr": "sum(kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$workload.*\", condition=\"true\"})", "legendFormat": "Ready", "refId": "A" },
+        { "expr": "sum(kube_pod_status_ready{namespace=~\"$namespace\", pod=~\"$workload.*\", condition=\"false\"})", "legendFormat": "Not Ready", "refId": "B" }
+      ],
+      "title": "Ready vs Not Ready Pods Over Time",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["kubernetes", "pods", "health"],
+  "templating": {
+    "list": [
+      { "datasource": "Prometheus", "definition": "label_values(kube_pod_info, namespace)", "name": "namespace", "label": "Namespace", "type": "query", "refresh": 2, "includeAll": true, "allValue": ".*" },
+      { "datasource": "Prometheus", "definition": "label_values(kube_pod_info{namespace=~\"$namespace\"}, created_by_name)", "name": "workload", "label": "Workload", "type": "query", "refresh": 2, "includeAll": true, "allValue": ".*" }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "",
+  "title": "Kubernetes / Pod Health & Readiness",
+  "uid": "kubernetes-pod-health",
+  "version": 1
+}
