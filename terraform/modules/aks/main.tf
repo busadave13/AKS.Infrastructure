@@ -60,7 +60,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     os_disk_type         = "Ephemeral"
     os_disk_size_gb      = 30
     os_sku               = "Ubuntu"
-    max_pods             = 30
+    max_pods             = var.system_node_max_pods
     vnet_subnet_id       = var.system_subnet_id
 
     # Only enable critical addons restriction when workload pool exists
@@ -171,7 +171,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
   os_sku                      = "Ubuntu"
   os_disk_type                = "Managed"
   os_disk_size_gb             = 30
-  max_pods                    = 30
+  max_pods                    = var.workload_node_max_pods
   vnet_subnet_id              = var.workload_subnet_id
   temporary_name_for_rotation = "workloadtmp"
   tags                        = var.tags

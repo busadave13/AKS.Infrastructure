@@ -12,7 +12,7 @@
 
 locals {
   dashboard_files = var.enable_grafana ? fileset("${path.module}/dashboards", "*.json") : []
-  
+
   # Azure Managed Prometheus datasource configuration
   # Grafana auto-creates a datasource named "Azure Monitor" for integrated workspaces
   prometheus_datasource_name = "Azure Monitor"

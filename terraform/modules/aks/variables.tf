@@ -117,6 +117,12 @@ variable "system_node_zones" {
   default     = ["1", "2", "3"]
 }
 
+variable "system_node_max_pods" {
+  description = "Maximum number of pods per node in the system node pool"
+  type        = number
+  default     = 30
+}
+
 #--------------------------------------------------------------
 # Workload Node Pool
 #--------------------------------------------------------------
@@ -148,4 +154,10 @@ variable "workload_node_spot" {
   description = "Whether to use spot instances for workload node pool"
   type        = bool
   default     = true
+}
+
+variable "workload_node_max_pods" {
+  description = "Maximum number of pods per node in the workload node pool"
+  type        = number
+  default     = 30
 }

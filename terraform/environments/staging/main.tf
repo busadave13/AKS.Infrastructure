@@ -100,9 +100,10 @@ module "aks" {
   workload_identity_name = "id-workload-${module.common.naming_prefix}"
 
   # System Node Pool
-  system_node_count   = var.system_node_count
-  system_node_vm_size = var.system_node_vm_size
-  system_node_zones   = var.system_node_zones
+  system_node_count    = var.system_node_count
+  system_node_vm_size  = var.system_node_vm_size
+  system_node_zones    = var.system_node_zones
+  system_node_max_pods = var.system_node_max_pods
 
   # Workload Node Pool
   enable_workload_node_pool = var.enable_workload_node_pool
@@ -110,6 +111,7 @@ module "aks" {
   workload_node_vm_size     = var.workload_node_vm_size
   workload_node_zones       = var.workload_node_zones
   workload_node_spot        = var.workload_node_spot
+  workload_node_max_pods    = var.workload_node_max_pods
 
   # Egress
   egress_public_ip_id = module.networking.egress_public_ip_id
