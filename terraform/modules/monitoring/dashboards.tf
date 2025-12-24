@@ -1,67 +1,43 @@
 # Grafana Dashboard Resources
-# Deploys dashboards to Azure Managed Grafana
+# Deploys dashboards to Azure Managed Grafana using azapi
 
 #--------------------------------------------------------------
-# Grafana Folders for Dashboard Organization
-#--------------------------------------------------------------
-
-#--------------------------------------------------------------
-# Dashboard Deployment via API (using local-exec)
-# Note: Dashboards are deployed via Grafana HTTP API
+# Locals for Dashboard Configuration
 #--------------------------------------------------------------
 
 locals {
-  dashboard_files = var.enable_grafana ? fileset("${path.module}/dashboards", "*.json") : []
+  dashboard_files = var.enable_grafana && var.deploy_dashboards ? fileset("${path.module}/dashboards", "*.json") : []
 
-  # Azure Managed Prometheus datasource configuration
-  # Grafana auto-creates a datasource named "Azure Monitor" for integrated workspaces
-  prometheus_datasource_name = "Azure Monitor"
+  # Map of dashboard filename to content
+  dashboards = {
+    for file in local.dashboard_files :
+    trimsuffix(file, ".json") => jsondecode(file("${path.module}/dashboards/${file}"))
+  }
 }
 
-# Deploy each dashboard JSON file
-resource "null_resource" "grafana_dashboards" {
-  for_each = var.enable_grafana && var.deploy_dashboards ? toset(local.dashboard_files) : []
+#--------------------------------------------------------------
+# Dashboard Deployment via Azure API
+# Uses azapi_resource_action to call Grafana REST API through Azure
+#--------------------------------------------------------------
 
-  triggers = {
-    dashboard_hash = filesha256("${path.module}/dashboards/${each.value}")
-    grafana_id     = var.enable_grafana ? azurerm_dashboard_grafana.main[0].id : ""
+resource "azapi_resource_action" "grafana_dashboard" {
+  for_each = var.enable_grafana && var.deploy_dashboards ? local.dashboards : {}
+
+  type        = "Microsoft.Dashboard/grafana@2023-09-01"
+  resource_id = "${azurerm_dashboard_grafana.main[0].id}/dashboards/${each.value.uid}"
+  method      = "PUT"
+
+  body = {
+    properties = {
+      definition = jsonencode({
+        dashboard = each.value
+        overwrite = true
+        message   = "Deployed via Terraform"
+      })
+    }
   }
 
-  provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
-    command     = <<-EOT
-      # Get Grafana endpoint
-      GRAFANA_ENDPOINT="${azurerm_dashboard_grafana.main[0].endpoint}"
-      
-      # Get access token using Azure CLI
-      ACCESS_TOKEN=$(az grafana api-key create \
-        --name ${azurerm_dashboard_grafana.main[0].name} \
-        --resource-group ${var.resource_group_name} \
-        --key dashboard-deploy-$(date +%s) \
-        --role Admin \
-        --time-to-live 1h \
-        --query key -o tsv 2>/dev/null || \
-        az account get-access-token --resource https://grafana.azure.com --query accessToken -o tsv)
-      
-      # Read dashboard JSON and update datasource references
-      DASHBOARD_JSON=$(cat "${path.module}/dashboards/${each.value}" | \
-        sed 's/"datasource": "Prometheus"/"datasource": {"type": "prometheus", "uid": "azure-monitor-obo"}/g' | \
-        sed 's/"datasource": "-- Grafana --"/"datasource": {"type": "grafana", "uid": "-- Grafana --"}/g')
-      
-      # Create the API payload
-      PAYLOAD=$(jq -n --argjson dashboard "$DASHBOARD_JSON" '{
-        "dashboard": $dashboard,
-        "overwrite": true,
-        "message": "Deployed via Terraform"
-      }')
-      
-      # Deploy dashboard
-      curl -s -X POST "$GRAFANA_ENDPOINT/api/dashboards/db" \
-        -H "Authorization: Bearer $ACCESS_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD"
-    EOT
-  }
+  response_export_values = ["*"]
 
   depends_on = [
     azurerm_dashboard_grafana.main,
@@ -75,4 +51,9 @@ resource "null_resource" "grafana_dashboards" {
 output "grafana_dashboard_count" {
   description = "Number of dashboards deployed"
   value       = var.enable_grafana && var.deploy_dashboards ? length(local.dashboard_files) : 0
+}
+
+output "grafana_dashboard_names" {
+  description = "Names of deployed dashboards"
+  value       = var.enable_grafana && var.deploy_dashboards ? keys(local.dashboards) : []
 }

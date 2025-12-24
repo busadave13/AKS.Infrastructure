@@ -1,4 +1,28 @@
 {
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source for Istio metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "datasource",
+      "id": "prometheus",
+      "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.0.0"
+    }
+  ],
   "annotations": { "list": [] },
   "editable": true,
   "id": null,
@@ -6,7 +30,7 @@
   "panels": [
     { "content": "<div class=\"dashboard-header text-center\"><span>RED: $canary.$namespace</span></div>", "gridPos": { "h": 3, "w": 24, "x": 0, "y": 0 }, "id": 89, "mode": "html", "title": "", "transparent": true, "type": "text" },
     {
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "unit": "ops" } },
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 3 },
       "id": 90,
@@ -16,7 +40,7 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 3 },
       "id": 98,
@@ -26,7 +50,7 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "unit": "ops" } },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 3 },
       "id": 97,
@@ -36,7 +60,7 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "unit": "percentunit" } },
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 3 },
       "id": 99,
@@ -46,7 +70,7 @@
       "type": "stat"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "gridPos": { "h": 4, "w": 12, "x": 0, "y": 7 },
       "id": 96,
@@ -60,7 +84,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": "Prometheus",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "unit": "s" } },
       "gridPos": { "h": 4, "w": 12, "x": 12, "y": 7 },
       "id": 91,
@@ -80,9 +104,24 @@
   "tags": ["flagger", "istio", "canary"],
   "templating": {
     "list": [
-      { "datasource": "Prometheus", "definition": "label_values(istio_requests_total, destination_workload_namespace)", "name": "namespace", "label": "Namespace", "type": "query", "refresh": 1 },
-      { "datasource": "Prometheus", "definition": "label_values(istio_requests_total{destination_workload_namespace=~\"$namespace\"}, destination_workload)", "name": "primary", "label": "Primary", "type": "query", "refresh": 1, "regex": "/.*-primary/" },
-      { "datasource": "Prometheus", "definition": "label_values(istio_requests_total{destination_workload_namespace=~\"$namespace\"}, destination_workload)", "name": "canary", "label": "Canary", "type": "query", "refresh": 1, "regex": "/^(?!.*-primary$).*$/" }
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Data Source",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "definition": "label_values(istio_requests_total, destination_workload_namespace)", "name": "namespace", "label": "Namespace", "type": "query", "refresh": 1 },
+      { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "definition": "label_values(istio_requests_total{destination_workload_namespace=~\"$namespace\"}, destination_workload)", "name": "primary", "label": "Primary", "type": "query", "refresh": 1, "regex": "/.*-primary/" },
+      { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "definition": "label_values(istio_requests_total{destination_workload_namespace=~\"$namespace\"}, destination_workload)", "name": "canary", "label": "Canary", "type": "query", "refresh": 1, "regex": "/^(?!.*-primary$).*$/" }
     ]
   },
   "time": { "from": "now-5m", "to": "now" },
