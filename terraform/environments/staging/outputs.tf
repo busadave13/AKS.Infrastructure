@@ -133,6 +133,11 @@ output "grafana_endpoint" {
   value       = module.monitoring.grafana_endpoint
 }
 
+output "flagger_identity_client_id" {
+  description = "Client ID of the Flagger managed identity (use in Kubernetes ServiceAccount annotation)"
+  value       = module.monitoring.flagger_identity_client_id
+}
+
 #--------------------------------------------------------------
 # GitOps
 #--------------------------------------------------------------

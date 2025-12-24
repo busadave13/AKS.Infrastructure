@@ -60,6 +60,41 @@ resource "azurerm_role_assignment" "grafana_admin" {
 }
 
 #--------------------------------------------------------------
+# Flagger Workload Identity
+#--------------------------------------------------------------
+
+# Managed Identity for Flagger (used to query Azure Monitor Prometheus metrics)
+resource "azurerm_user_assigned_identity" "flagger" {
+  count = var.enable_flagger_identity ? 1 : 0
+
+  name                = var.flagger_identity_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tags                = var.tags
+}
+
+# Grant Flagger identity "Monitoring Data Reader" on Azure Monitor Workspace
+resource "azurerm_role_assignment" "flagger_monitoring_data_reader" {
+  count = var.enable_flagger_identity ? 1 : 0
+
+  scope                = azurerm_monitor_workspace.main.id
+  role_definition_name = "Monitoring Data Reader"
+  principal_id         = azurerm_user_assigned_identity.flagger[0].principal_id
+}
+
+# Federated Identity Credential for Flagger Workload Identity
+resource "azurerm_federated_identity_credential" "flagger" {
+  count = var.enable_flagger_identity ? 1 : 0
+
+  name                = "fed-${var.flagger_identity_name}"
+  resource_group_name = var.resource_group_name
+  parent_id           = azurerm_user_assigned_identity.flagger[0].id
+  audience            = ["api://AzureADTokenExchange"]
+  issuer              = var.aks_oidc_issuer_url
+  subject             = "system:serviceaccount:${var.flagger_namespace}:${var.flagger_service_account}"
+}
+
+#--------------------------------------------------------------
 # Prometheus Rule Groups (Alerting Rules)
 #--------------------------------------------------------------
 resource "azurerm_monitor_alert_prometheus_rule_group" "kubernetes" {

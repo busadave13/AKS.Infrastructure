@@ -1,9 +1,39 @@
 # Active Context
 
 ## Current Focus
-**Completed**: Consolidated AKS networking infrastructure, simplified node pool configuration, and updated naming conventions.
+**In Progress**: Added Flagger workload identity for Azure Monitor Prometheus access.
 
-## Recent Changes (December 23, 2025)
+## Recent Changes (December 24, 2025)
+
+### Flagger Workload Identity
+Added workload identity resources in the monitoring module for Flagger to query Azure Monitor Prometheus metrics:
+
+- **Managed Identity**: `id-flagger-azr-staging-wus2`
+- **Role Assignment**: "Monitoring Data Reader" on Azure Monitor Workspace
+- **Federated Credential**: Binds to `flagger-system:flagger-sa` service account
+- **Output**: `flagger_identity_client_id` for Kubernetes ServiceAccount annotation
+
+**Files Modified:**
+- `terraform/modules/monitoring/variables.tf` - Added Flagger identity variables
+- `terraform/modules/monitoring/main.tf` - Added identity, role assignment, federated credential
+- `terraform/modules/monitoring/outputs.tf` - Added Flagger identity outputs
+- `terraform/environments/staging/main.tf` - Enabled Flagger identity, moved monitoring after AKS
+- `terraform/environments/staging/outputs.tf` - Added Flagger client ID output
+
+**Usage:** After terraform apply, use the `flagger_identity_client_id` output to annotate the Flagger ServiceAccount:
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flagger-sa
+  namespace: flagger-system
+  annotations:
+    azure.workload.identity/client-id: "<flagger_identity_client_id>"
+```
+
+---
+
+## Previous Changes (December 23, 2025)
 
 ### 1. Identifier and DNS Label Update
 Changed project identifier and ingress DNS configuration:

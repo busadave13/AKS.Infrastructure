@@ -69,3 +69,36 @@ variable "alert_action_group_id" {
   type        = string
   default     = null
 }
+
+#--------------------------------------------------------------
+# Flagger Workload Identity
+#--------------------------------------------------------------
+variable "enable_flagger_identity" {
+  description = "Enable Flagger workload identity for Azure Monitor access"
+  type        = bool
+  default     = false
+}
+
+variable "flagger_identity_name" {
+  description = "Name of the Flagger managed identity"
+  type        = string
+  default     = ""
+}
+
+variable "aks_oidc_issuer_url" {
+  description = "OIDC issuer URL from the AKS cluster (required when enable_flagger_identity is true)"
+  type        = string
+  default     = ""
+}
+
+variable "flagger_namespace" {
+  description = "Kubernetes namespace where Flagger is deployed"
+  type        = string
+  default     = "flagger-system"
+}
+
+variable "flagger_service_account" {
+  description = "Kubernetes service account name for Flagger"
+  type        = string
+  default     = "flagger-sa"
+}

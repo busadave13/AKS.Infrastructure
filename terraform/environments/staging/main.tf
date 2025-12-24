@@ -53,32 +53,6 @@ module "networking" {
 }
 
 #--------------------------------------------------------------
-# Monitoring Module
-#--------------------------------------------------------------
-module "monitoring" {
-  source = "../../modules/monitoring"
-
-  resource_group_name = module.networking.resource_group_name
-  location            = module.networking.resource_group_location
-  environment         = module.common.environment
-
-  # Azure Monitor (Prometheus)
-  monitor_workspace_name = "amw-${module.common.naming_prefix}"
-
-  # Grafana
-  enable_grafana           = var.enable_grafana
-  grafana_name             = "graf-${module.common.naming_prefix}"
-  grafana_admin_object_ids = var.grafana_admin_object_ids
-
-  # Alerting
-  enable_prometheus_alerts = false
-  aks_cluster_name         = ""
-  alert_action_group_id    = ""
-
-  tags = module.common.tags
-}
-
-#--------------------------------------------------------------
 # AKS Module
 #--------------------------------------------------------------
 module "aks" {
@@ -124,6 +98,41 @@ module "aks" {
   admin_user_object_ids  = var.aks_admin_user_object_ids
 
   tags = module.common.tags
+}
+
+#--------------------------------------------------------------
+# Monitoring Module
+#--------------------------------------------------------------
+module "monitoring" {
+  source = "../../modules/monitoring"
+
+  resource_group_name = module.networking.resource_group_name
+  location            = module.networking.resource_group_location
+  environment         = module.common.environment
+
+  # Azure Monitor (Prometheus)
+  monitor_workspace_name = "amw-${module.common.naming_prefix}"
+
+  # Grafana
+  enable_grafana           = var.enable_grafana
+  grafana_name             = "graf-${module.common.naming_prefix}"
+  grafana_admin_object_ids = var.grafana_admin_object_ids
+
+  # Alerting
+  enable_prometheus_alerts = false
+  aks_cluster_name         = ""
+  alert_action_group_id    = ""
+
+  # Flagger Workload Identity
+  enable_flagger_identity = true
+  flagger_identity_name   = "id-flagger-${module.common.naming_prefix}"
+  aks_oidc_issuer_url     = module.aks.oidc_issuer_url
+  flagger_namespace       = "flagger-system"
+  flagger_service_account = "flagger-sa"
+
+  tags = module.common.tags
+
+  depends_on = [module.aks]
 }
 
 #--------------------------------------------------------------
